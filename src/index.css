@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: 'Outfit', 'Segoe UI', sans-serif; background: #F0F4F8; }
+
+/* Force native select/input font on all devices including iOS */
+input, select, textarea, button {
+  font-family: 'Outfit', 'Segoe UI', sans-serif;
+  font-size: 14px; /* 16px prevents iOS auto-zoom */
+}
