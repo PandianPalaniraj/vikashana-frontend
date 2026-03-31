@@ -7,6 +7,7 @@ import useSubscriptionStore from '../../store/subscriptionStore'
 
 // ── API helper ────────────────────────────────────────────────
 const BASE = '/api/v1';
+const DEACTIVATION_CODES = ['SCHOOL_DEACTIVATED', 'ACCOUNT_DEACTIVATED', 'SCHOOL_NOT_FOUND'];
 async function apiFetch(path, { method = 'GET', body } = {}) {
   const token = localStorage.getItem('token');
   const opts = {
@@ -20,7 +21,19 @@ async function apiFetch(path, { method = 'GET', body } = {}) {
   if (body) opts.body = JSON.stringify(body);
   const res  = await fetch(`${BASE}${path}`, opts);
   const json = await res.json();
-  if (!res.ok) throw new Error(json.message || 'Request failed');
+  if (!res.ok) {
+    if (res.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('subscription');
+      if (DEACTIVATION_CODES.includes(json.code)) {
+        alert(json.message);
+      }
+      window.location.href = '/login';
+      return;
+    }
+    throw new Error(json.message || 'Request failed');
+  }
   return json;
 }
 
