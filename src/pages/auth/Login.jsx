@@ -8,6 +8,7 @@ import useSubscriptionStore from '../../store/subscriptionStore'
 export default function Login() {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword]     = useState('')
+  const [schoolCode, setSchoolCode] = useState('')
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState(null)
   const navigate = useNavigate()
@@ -27,7 +28,9 @@ export default function Login() {
     setError(null)
     try {
       // Send identifier as-is — backend detects phone vs email
-      const res = await login({ email: identifier, password })
+      const payload = { email: identifier, password }
+      if (schoolCode.trim()) payload.school_code = schoolCode.trim().toUpperCase()
+      const res = await login(payload)
       const { user, token } = res.data.data
       setAuth(user, token)
       if (user.subscription) setSubscription(user.subscription)
@@ -85,6 +88,27 @@ export default function Login() {
                 : '📧 Logging in as admin'}
             </p>
           </div>
+
+          {isPhone && (
+            <div>
+              <label style={{ fontSize:12, fontWeight:700, color:'#374151', display:'block', marginBottom:6 }}>
+                School Code
+              </label>
+              <input
+                type="text"
+                value={schoolCode}
+                onChange={e => setSchoolCode(e.target.value.toUpperCase())}
+                required={isPhone}
+                autoComplete="off"
+                placeholder="e.g. VIK1234"
+                maxLength={10}
+                style={{ width:'100%', padding:'10px 14px', borderRadius:8, border:'1px solid #E2E8F0', fontSize:14, outline:'none', boxSizing:'border-box', fontFamily:'monospace', letterSpacing:'0.05em' }}
+              />
+              <p style={{ margin:'5px 0 0', fontSize:11, color:'#94A3B8' }}>
+                Ask your school admin for the school code
+              </p>
+            </div>
+          )}
 
           <div>
             <label style={{ fontSize:12, fontWeight:700, color:'#374151', display:'block', marginBottom:6 }}>Password</label>
