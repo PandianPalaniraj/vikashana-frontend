@@ -763,70 +763,194 @@ function Branding({ showToast, isMobile }) {
 }
 
 // ── Backup & Export Section ───────────────────────────────────
+
+// Safely escape a CSV cell value
+function csvCell(v) {
+  if (v === null || v === undefined) return '';
+  const s = String(v);
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) return `"${s.replace(/"/g,'""')}"`;
+  return s;
+}
+function toCSV(rows) {
+  if (!rows.length) return '';
+  const headers = Object.keys(rows[0]);
+  const lines   = [headers.map(csvCell).join(',')];
+  for (const row of rows) lines.push(headers.map(h => csvCell(row[h])).join(','));
+  return lines.join('\r\n');
+}
+function downloadCSV(csv, filename) {
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Fetch helpers — return flat array of all records
+async function fetchAllStudents() {
+  const res  = await apiFetch('/students?per_page=9999&page=1');
+  return (res.data || []).map(s => ({
+    ID: s.id, Admission_No: s.admission_no, Name: s.name,
+    DOB: s.dob, Gender: s.gender, Blood_Group: s.blood_group,
+    Class: s.class, Section: s.section, Status: s.status,
+    Parent_Name: s.parent_name, Parent_Phone: s.parent_phone,
+    Parent_Email: s.parent_email, Parent_Relation: s.parent_relation,
+    Address: s.address, City: s.city, State: s.state, Pincode: s.pincode,
+    Aadhar_No: s.aadhar_no, Previous_School: s.previous_school,
+  }));
+}
+async function fetchAllTeachers() {
+  const res = await apiFetch('/teachers?per_page=9999&page=1');
+  return (res.data || []).map(t => ({
+    ID: t.id, Employee_ID: t.empId, Name: t.name,
+    Gender: t.gender, DOB: t.dob, Blood_Group: t.bloodGroup,
+    Phone: t.phone, Email: t.email, Designation: t.designation,
+    Qualification: t.qualification, Join_Date: t.joinDate,
+    Status: t.status, Address: t.address, City: t.city, State: t.state,
+  }));
+}
+async function fetchAllFees() {
+  const res = await apiFetch('/fees/invoices?per_page=9999&page=1');
+  return (res.data || []).map(f => ({
+    ID: f.id, Invoice_No: f.invoice_no,
+    Student_Name: f.student?.name || f.student_id,
+    Month: f.month, Total: f.total, Paid: f.paid,
+    Discount: f.discount, Balance: (f.total - f.paid - (f.discount||0)),
+    Status: f.status, Due_Date: f.due_date, Notes: f.notes,
+  }));
+}
+async function fetchAllAttendance() {
+  const res = await apiFetch('/attendance?per_page=9999');
+  return (res.data || []).map(a => ({
+    Student_ID: a.student_id, Student_Name: a.student_name || '',
+    Date: a.date, Status: a.status, Note: a.note,
+  }));
+}
+async function fetchAllAdmissions() {
+  const res = await apiFetch('/admissions/enquiries?per_page=9999&page=1');
+  return (res.data || []).map(a => ({
+    ID: a.id, Student_Name: a.student_name, DOB: a.dob,
+    Gender: a.gender, Apply_Class: a.apply_class,
+    Parent_Name: a.parent_name, Parent_Phone: a.parent_phone,
+    Parent_Email: a.parent_email, Address: a.address,
+    Source: a.source, Stage: a.stage, Notes: a.notes,
+    Follow_Up_Date: a.follow_up_date, Enquiry_Date: a.date,
+  }));
+}
+async function fetchAllExams() {
+  const res = await apiFetch('/exams?per_page=9999');
+  return (res.data || []).map(e => ({
+    ID: e.id, Name: e.name, Type: e.type,
+    Class: e.class, Status: e.status,
+    Start_Date: e.start_date, End_Date: e.end_date,
+    Academic_Year: e.academic_year, Subjects_Count: e.subjects_count,
+  }));
+}
+
+const EXPORT_CONFIG = {
+  students:   { icon:'👨‍🎓', label:'Students Data',       desc:'All student records, contact info, class details',  fetch: fetchAllStudents   },
+  teachers:   { icon:'👨‍🏫', label:'Teachers Data',       desc:'Staff info, subjects, class assignments',            fetch: fetchAllTeachers   },
+  fees:       { icon:'💰',   label:'Fee Invoices',        desc:'All fee invoices, payments and balances',            fetch: fetchAllFees       },
+  attendance: { icon:'📅',   label:'Attendance Records',  desc:'Daily attendance records',                           fetch: fetchAllAttendance  },
+  admissions: { icon:'🎓',   label:'Admission Enquiries', desc:'All enquiry records and conversion status',          fetch: fetchAllAdmissions  },
+  exams:      { icon:'📊',   label:'Exams & Results',     desc:'Exam list with class, type, and dates',              fetch: fetchAllExams      },
+};
+
 function BackupExport({ showToast, isMobile }) {
-  const [exporting, setExporting] = useState(null);
+  const [exporting, setExporting]   = useState(null);
+  const [counts,    setCounts]      = useState({});
+  const [loadingCounts, setLoadingCounts] = useState(true);
 
-  const EXPORT_ITEMS = [
-    { key:"students",   icon:"👨‍🎓", label:"Students Data",      desc:"All student records, contact info, class details",   rows:18  },
-    { key:"attendance", icon:"📅",   label:"Attendance Records", desc:"Daily attendance for all students this year",         rows:432 },
-    { key:"fees",       icon:"💰",   label:"Fee Records",        desc:"All fee payments, dues and receipts",                 rows:96  },
-    { key:"marks",      icon:"📊",   label:"Marks & Results",    desc:"Exam marks, report cards, subject scores",            rows:210 },
-    { key:"teachers",   icon:"👨‍🏫", label:"Teachers Data",      desc:"Staff info, subjects, class assignments",             rows:8   },
-    { key:"admissions", icon:"🎓",   label:"Admission Enquiries",desc:"All enquiry records and conversion status",           rows:10  },
-  ];
+  // Load real counts on mount
+  useEffect(() => {
+    async function loadCounts() {
+      try {
+        const [students, teachers, fees, admissions, exams] = await Promise.allSettled([
+          apiFetch('/students?per_page=1&page=1'),
+          apiFetch('/teachers?per_page=1&page=1'),
+          apiFetch('/fees/invoices?per_page=1&page=1'),
+          apiFetch('/admissions/enquiries?per_page=1&page=1'),
+          apiFetch('/exams?per_page=1&page=1'),
+        ]);
+        const attRes = await apiFetch('/attendance?per_page=9999').catch(() => ({ data: [] }));
+        setCounts({
+          students:   students.status   === 'fulfilled' ? (students.value?.meta?.total   ?? students.value?.data?.length   ?? 0) : 0,
+          teachers:   teachers.status   === 'fulfilled' ? (teachers.value?.meta?.total   ?? teachers.value?.data?.length   ?? 0) : 0,
+          fees:       fees.status       === 'fulfilled' ? (fees.value?.meta?.total       ?? fees.value?.data?.length       ?? 0) : 0,
+          admissions: admissions.status === 'fulfilled' ? (admissions.value?.meta?.total ?? admissions.value?.data?.length ?? 0) : 0,
+          exams:      exams.status      === 'fulfilled' ? (exams.value?.meta?.total      ?? exams.value?.data?.length      ?? 0) : 0,
+          attendance: (attRes.data || []).length,
+        });
+      } finally { setLoadingCounts(false); }
+    }
+    loadCounts();
+  }, []);
 
-  const doExport = (key, label) => {
+  const doExport = async (key) => {
+    const cfg = EXPORT_CONFIG[key];
     setExporting(key);
-    setTimeout(()=>{
-      const csv  = `ID,Name,Class,Section,Status\n1,Sample Student,10,A,Active\n2,Sample Student 2,9,B,Active`;
-      const blob = new Blob([csv],{ type:"text/csv" });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement("a");
-      a.href     = url;
-      a.download = `vikashana_${key}_${new Date().toISOString().split("T")[0]}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setExporting(null);
-      showToast(`${label} exported as CSV!`);
-    },800);
+    try {
+      const rows = await cfg.fetch();
+      if (!rows.length) { showToast(`No ${cfg.label} data found.`); return; }
+      const csv  = toCSV(rows);
+      downloadCSV(csv, `vikashana_${key}_${new Date().toISOString().split('T')[0]}.csv`);
+      showToast(`${cfg.label} — ${rows.length} records exported ✅`);
+    } catch(e) {
+      showToast(`Export failed: ${e.message}`);
+    } finally { setExporting(null); }
   };
 
-  const doExportAll = () => {
-    setExporting("all");
-    setTimeout(()=>{
-      EXPORT_ITEMS.forEach(item=>doExport(item.key, item.label));
-      setExporting(null);
-      showToast("All data exported!");
-    },1200);
+  const doExportAll = async () => {
+    setExporting('all');
+    try {
+      let total = 0;
+      for (const key of Object.keys(EXPORT_CONFIG)) {
+        const rows = await EXPORT_CONFIG[key].fetch().catch(() => []);
+        if (rows.length) {
+          downloadCSV(toCSV(rows), `vikashana_${key}_${new Date().toISOString().split('T')[0]}.csv`);
+          total += rows.length;
+        }
+      }
+      showToast(`All data exported — ${total} total records ✅`);
+    } catch(e) {
+      showToast(`Export failed: ${e.message}`);
+    } finally { setExporting(null); }
   };
 
-  const lastBackup = "2025-12-10 08:30 AM";
+  const totalRecords = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
     <SectionCard title="Backup & Export" icon="💾" isMobile={isMobile}>
       <div style={{ background:"linear-gradient(135deg,#ECFDF5,#D1FAE5)",border:"1px solid #6EE7B7",borderRadius:12,padding:isMobile?"12px":"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:isMobile?10:14,flexWrap:isMobile?"wrap":"nowrap" }}>
         <div style={{ fontSize:28 }}>✅</div>
         <div>
-          <div style={{ fontWeight:800,fontSize:14,color:"#065F46" }}>Last Backup Successful</div>
-          <div style={{ fontSize:12,color:"#059669",marginTop:2 }}>{lastBackup} · All data secured</div>
+          <div style={{ fontWeight:800,fontSize:14,color:"#065F46" }}>Export your school data as CSV files</div>
+          <div style={{ fontSize:12,color:"#059669",marginTop:2 }}>
+            {loadingCounts ? 'Loading counts…' : `${totalRecords} total records across ${Object.keys(EXPORT_CONFIG).length} modules`}
+          </div>
         </div>
-        <button onClick={()=>showToast("Backup created successfully!")} style={{ marginLeft:"auto",background:"#10B981",color:"#fff",border:"none",borderRadius:9,padding:"9px 18px",fontSize:12,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(16,185,129,0.3)" }}>
-          🔄 Backup Now
+        <button onClick={doExportAll} disabled={exporting==='all'}
+          style={{ marginLeft:"auto",background:exporting==='all'?"#6EE7B7":"#10B981",color:"#fff",border:"none",borderRadius:9,padding:"9px 18px",fontSize:12,fontWeight:700,cursor:exporting==='all'?"not-allowed":"pointer",boxShadow:"0 2px 8px rgba(16,185,129,0.3)",whiteSpace:"nowrap" }}>
+          {exporting==='all' ? '⏳ Exporting…' : '📦 Export All'}
         </button>
       </div>
 
       <div style={{ fontWeight:700,fontSize:13,color:"#0F172A",marginBottom:12 }}>📤 Export Individual Datasets</div>
       <div style={{ display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:10,marginBottom:16 }}>
-        {EXPORT_ITEMS.map(item=>(
-          <div key={item.key} style={{ display:"flex",alignItems:"center",gap:12,padding:"13px 14px",background:"#F8FAFC",borderRadius:11,border:"1px solid #F1F5F9" }}>
-            <div style={{ width:42,height:42,borderRadius:10,background:"#EEF2FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>{item.icon}</div>
+        {Object.entries(EXPORT_CONFIG).map(([key, cfg]) => (
+          <div key={key} style={{ display:"flex",alignItems:"center",gap:12,padding:"13px 14px",background:"#F8FAFC",borderRadius:11,border:"1px solid #F1F5F9" }}>
+            <div style={{ width:42,height:42,borderRadius:10,background:"#EEF2FF",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0 }}>{cfg.icon}</div>
             <div style={{ flex:1,minWidth:0 }}>
-              <div style={{ fontWeight:700,fontSize:12,color:"#0F172A" }}>{item.label}</div>
-              <div style={{ fontSize:10,color:"#94A3B8",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{item.rows} records</div>
+              <div style={{ fontWeight:700,fontSize:12,color:"#0F172A" }}>{cfg.label}</div>
+              <div style={{ fontSize:10,color:"#94A3B8",marginTop:1 }}>
+                {loadingCounts ? '…' : `${counts[key] ?? 0} records`}
+              </div>
             </div>
-            <button onClick={()=>doExport(item.key, item.label)} disabled={exporting===item.key}
-              style={{ background:exporting===item.key?"#F1F5F9":"#EEF2FF",color:exporting===item.key?"#94A3B8":"#6366F1",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:exporting===item.key?"not-allowed":"pointer",whiteSpace:"nowrap" }}>
-              {exporting===item.key?"⏳…":"⬇️ CSV"}
+            <button onClick={()=>doExport(key)} disabled={!!exporting}
+              style={{ background:exporting===key?"#F1F5F9":"#EEF2FF",color:exporting===key?"#94A3B8":"#6366F1",border:"none",borderRadius:8,padding:"6px 12px",fontSize:11,fontWeight:700,cursor:exporting===key?"not-allowed":"pointer",whiteSpace:"nowrap" }}>
+              {exporting===key ? '⏳…' : '⬇️ CSV'}
             </button>
           </div>
         ))}
@@ -835,11 +959,13 @@ function BackupExport({ showToast, isMobile }) {
       <div style={{ background:"linear-gradient(135deg,#0F172A,#1E293B)",borderRadius:12,padding:"18px 22px",display:"flex",alignItems:"center",gap:16 }}>
         <div>
           <div style={{ fontWeight:800,fontSize:14,color:"#fff" }}>📦 Export All Data</div>
-          <div style={{ fontSize:12,color:"rgba(255,255,255,0.5)",marginTop:2 }}>Download all {EXPORT_ITEMS.reduce((a,i)=>a+i.rows,0)} records across all modules as separate CSV files</div>
+          <div style={{ fontSize:12,color:"rgba(255,255,255,0.5)",marginTop:2 }}>
+            {loadingCounts ? 'Loading…' : `${totalRecords} records across ${Object.keys(EXPORT_CONFIG).length} modules — one CSV per module`}
+          </div>
         </div>
-        <button onClick={doExportAll} disabled={exporting==="all"}
+        <button onClick={doExportAll} disabled={!!exporting}
           style={{ marginLeft:"auto",background:exporting==="all"?"#334155":"linear-gradient(135deg,#6366F1,#4F46E5)",color:"#fff",border:"none",borderRadius:9,padding:"10px 20px",fontSize:13,fontWeight:700,cursor:exporting==="all"?"not-allowed":"pointer",whiteSpace:"nowrap",boxShadow:"0 2px 10px rgba(99,102,241,0.4)" }}>
-          {exporting==="all"?"⏳ Exporting…":"📦 Export All"}
+          {exporting==="all" ? "⏳ Exporting…" : "📦 Export All"}
         </button>
       </div>
     </SectionCard>
