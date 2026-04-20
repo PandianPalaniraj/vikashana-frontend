@@ -480,7 +480,6 @@ export default function Exams() {
           class_id:         form.classId,
           start_date:       form.startDate || null,
           end_date:         form.endDate   || null,
-          status:           form.status,
         }),
       });
       if (!r.success) { showToast(r.message || "Failed", "error"); return; }
@@ -952,11 +951,6 @@ export default function Exams() {
             <Field label="Exam Type *">
               <select value={form.type} onChange={e => fc("type", e.target.value)} style={inp}>
                 {EXAM_TYPES.map(t => <option key={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select value={form.status} onChange={e => fc("status", e.target.value)} style={inp}>
-                {Object.keys(STATUS_META).map(s => <option key={s}>{s}</option>)}
               </select>
             </Field>
             <Field label="Class *">
