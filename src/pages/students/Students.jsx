@@ -146,6 +146,11 @@ function PhotoUpload({ value, onChange }) {
   const handleFile = e => {
     const file = e.target.files[0];
     if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Photo must be under 2 MB. Please choose a smaller file.');
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = ev => {
       onChange("photo", ev.target.result);
@@ -221,6 +226,11 @@ function DocsUpload({ value, onChange }) {
       ["application/pdf","image/jpeg","image/png","image/jpg"].includes(f.type) ||
       f.name.match(/\.(pdf|jpg|jpeg|png|doc|docx)$/i)
     );
+    const oversized = arr.filter(f => f.size > 5 * 1024 * 1024);
+    if (oversized.length > 0) {
+      alert(`File too large: ${oversized.map(f => f.name).join(', ')}. Each document must be under 5 MB.`);
+      return;
+    }
     const readers = arr.map(file => new Promise(res => {
       const reader = new FileReader();
       reader.onload = ev => res({ name:file.name, size:file.size, url:ev.target.result, file });
@@ -930,6 +940,7 @@ export default function Students() {
         showToast(editId ? `${fullName} updated!` : `${fullName} enrolled!`);
         setForm(EMPTY); setStep(1); setEditId(null); setView("list");
         refetch();
+        if (!editId) fetchWidgetStats();
       } catch (e) { showToast(e.message, "error"); }
     } else {
       // JSON path (no files)
@@ -966,6 +977,7 @@ export default function Students() {
         showToast(editId ? `${fullName} updated!` : `${fullName} enrolled!`);
         setForm(EMPTY); setStep(1); setEditId(null); setView("list");
         refetch();
+        if (!editId) fetchWidgetStats();
       } catch (e) { showToast(e.message, "error"); }
     }
   };

@@ -987,16 +987,16 @@ function BackupExport({ showToast, isMobile }) {
 
 // ── Subscription Section ───────────────────────────────────────
 const PLAN_TABLE = [
-  { feature:'Max Students',  starter:'Unlimited', pro:'Unlimited', premium:'Unlimited', enterprise:'Unlimited' },
-  { feature:'Max Teachers',  starter:'Unlimited', pro:'Unlimited', premium:'Unlimited', enterprise:'Unlimited' },
-  { feature:'Price / student',starter:'₹15',     pro:'₹25',       premium:'₹40',       enterprise:'Custom'   },
-  { feature:'Mobile App',    starter:'❌',        pro:'✅',        premium:'✅',         enterprise:'✅'       },
-  { feature:'Reports',       starter:'✅',        pro:'✅',        premium:'✅',         enterprise:'✅'       },
-  { feature:'Payroll',       starter:'❌',        pro:'❌',        premium:'✅',         enterprise:'✅'       },
-  { feature:'Priority Support',starter:'❌',      pro:'✅',        premium:'24×7',       enterprise:'Dedicated'},
+  { feature:'Max Students',  pro:'Unlimited', premium:'Unlimited', enterprise:'Unlimited' },
+  { feature:'Max Teachers',  pro:'Unlimited', premium:'Unlimited', enterprise:'Unlimited' },
+  { feature:'Price / student',pro:'₹25',      premium:'₹40',       enterprise:'Custom'   },
+  { feature:'Mobile App',    pro:'✅',        premium:'✅',         enterprise:'✅'       },
+  { feature:'Reports',       pro:'✅',        premium:'✅',         enterprise:'✅'       },
+  { feature:'Payroll',       pro:'❌',        premium:'✅',         enterprise:'✅'       },
+  { feature:'Priority Support',pro:'✅',      premium:'24×7',       enterprise:'Dedicated'},
 ];
-const PLAN_COLOR  = { starter:'#3B82F6', pro:'#6366F1', premium:'#8B5CF6', enterprise:'#F59E0B' };
-const PLAN_LABEL  = { starter:'Starter', pro:'Pro', premium:'Premium', enterprise:'Enterprise' };
+const PLAN_COLOR  = { pro:'#6366F1', premium:'#8B5CF6', enterprise:'#F59E0B' };
+const PLAN_LABEL  = { pro:'Pro', premium:'Premium', enterprise:'Enterprise' };
 const STATUS_COLOR= { active:'#22C55E', trial:'#F59E0B', overdue:'#EF4444', cancelled:'#94A3B8', expired:'#DC2626' };
 
 function UsageBar({ used, max, label }) {
@@ -1057,29 +1057,9 @@ function SubscriptionSection({ showToast, isMobile, onOpenFeedback }) {
     ? Math.ceil((new Date(sub.trialEndsAt) - new Date()) / 86400000)
     : null;
 
-  const planCols = ['starter','pro','premium','enterprise'];
+  const planCols = ['pro','premium','enterprise'];
 
   const PLANS = [
-    {
-      id: 'starter',
-      name: 'Starter',
-      price: 15,
-      unit: 'per student / month',
-      annualPrice: 12.50,
-      color: '#3B82F6',
-      bg: '#EFF6FF',
-      badge: null,
-      mobile: false,
-      features: [
-        '✅ Unlimited students',
-        '✅ Unlimited teachers',
-        '✅ All web modules',
-        '✅ Parent web portal',
-        '✅ Advanced reports',
-        '✅ Annual billing discount',
-        '❌ Mobile app',
-      ]
-    },
     {
       id: 'pro',
       name: 'Pro',
@@ -1091,7 +1071,8 @@ function SubscriptionSection({ showToast, isMobile, onOpenFeedback }) {
       badge: 'Most Popular',
       mobile: true,
       features: [
-        '✅ Everything in Starter',
+        '✅ Unlimited students & teachers',
+        '✅ All web modules',
         '✅ Parent mobile app',
         '✅ Teacher mobile app',
         '✅ Push notifications',

@@ -22,6 +22,10 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10)
 }
 
+function tomorrowStr() {
+  const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10)
+}
+
 export default function ParentLeaves() {
   const navigate = useNavigate()
   const activeStudent = useParentStore(s => s.activeStudent)
@@ -316,6 +320,25 @@ export default function ParentLeaves() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Date shortcuts */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                {[
+                  { label: 'Today', from: todayStr(),    to: todayStr()    },
+                  { label: 'Tomorrow', from: tomorrowStr(), to: tomorrowStr() },
+                ].map(({ label, from, to }) => (
+                  <button key={label} type="button"
+                    onClick={() => setForm(f => ({ ...f, from_date: from, to_date: to }))}
+                    style={{
+                      padding: '6px 14px', borderRadius: 8, border: '1.5px solid #E2E8F0',
+                      background: form.from_date === from && form.to_date === to ? '#6366F1' : '#F8FAFC',
+                      color: form.from_date === from && form.to_date === to ? '#fff' : '#374151',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    }}>
+                    {label}
+                  </button>
+                ))}
               </div>
 
               {/* Dates */}
