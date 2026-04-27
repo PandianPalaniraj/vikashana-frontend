@@ -32,7 +32,7 @@ const fmtDur = m => DUR_OPTS.find(d => d.val === Number(m))?.label || (m ? `${m}
 
 const EMPTY_FORM = {
   name: "", type: "Unit Test", academicYearId: "", classId: "",
-  startDate: "", endDate: "", status: "Upcoming",
+  startDate: "", endDate: "",
 };
 const EMPTY_SLOT = {
   subjectId: "", date: "", startTime: "09:00", durationMinutes: 120,
