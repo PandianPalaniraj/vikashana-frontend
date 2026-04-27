@@ -501,7 +501,6 @@ export default function Exams() {
         type:       editModal.type,
         start_date: editModal.start_date || null,
         end_date:   editModal.end_date   || null,
-        status:     editModal.status,
       }),
     });
     if (!r.success) { showToast(r.message || "Failed", "error"); return; }
@@ -1147,23 +1146,21 @@ function EditExamModal({ exam, setExam, onSave, onClose }) {
               onFocus={e => e.target.style.borderColor="#6366F1"}
               onBlur={e => e.target.style.borderColor="#E2E8F0"}/>
           </Field>
+          <Field label="Type">
+            <select value={exam.type} onChange={e => ec("type", e.target.value)} style={inp}>
+              {EXAM_TYPES.map(t => <option key={t}>{t}</option>)}
+            </select>
+          </Field>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-            <Field label="Type">
-              <select value={exam.type} onChange={e => ec("type", e.target.value)} style={inp}>
-                {EXAM_TYPES.map(t => <option key={t}>{t}</option>)}
-              </select>
-            </Field>
-            <Field label="Status">
-              <select value={exam.status} onChange={e => ec("status", e.target.value)} style={inp}>
-                {Object.keys(STATUS_META).map(s => <option key={s}>{s}</option>)}
-              </select>
-            </Field>
             <Field label="Start Date">
               <input type="date" value={exam.start_date || ""} onChange={e => ec("start_date", e.target.value)} style={inp}/>
             </Field>
             <Field label="End Date">
               <input type="date" value={exam.end_date || ""} onChange={e => ec("end_date", e.target.value)} style={inp}/>
             </Field>
+          </div>
+          <div style={{ fontSize:11, color:"#94A3B8", marginTop:8, fontStyle:"italic" }}>
+            ℹ️ Status is auto-computed from dates (Upcoming / Ongoing / Completed)
           </div>
         </div>
         <div style={{ padding:"0 24px 24px", display:"flex", gap:10 }}>
