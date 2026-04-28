@@ -6,7 +6,7 @@ import useAuthStore from '../../store/authStore'
 import useSubscriptionStore from '../../store/subscriptionStore'
 
 // ── API helper ────────────────────────────────────────────────
-const BASE = '/api/v1';
+const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 const DEACTIVATION_CODES = ['SCHOOL_DEACTIVATED', 'ACCOUNT_DEACTIVATED', 'SCHOOL_NOT_FOUND'];
 async function apiFetch(path, { method = 'GET', body } = {}) {
   const token = localStorage.getItem('token');
@@ -1556,7 +1556,7 @@ function FeedbackModal({ onClose, showToast }) {
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch('/api/v1/feedback', {
+      const res = await fetch(`${BASE}/feedback`, {
         method:'POST',
         headers:{ Authorization:`Bearer ${token}`, 'Content-Type':'application/json', Accept:'application/json' },
         body: JSON.stringify(form),

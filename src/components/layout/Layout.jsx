@@ -5,6 +5,8 @@ import useAppStore from '../../store/appStore'
 import useSubscriptionStore from '../../store/subscriptionStore'
 import { logout } from '../../api/auth'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+
 // ── Breakpoint hook ───────────────────────────────────────────
 function useBreakpoint() {
   const [bp, setBp] = useState(() => {
@@ -232,7 +234,7 @@ function Topbar({ bp, onMenuOpen, user, clearAuth, navigate }) {
     if (!token) return
     setNotifsLoading(true)
     try {
-      const res  = await fetch('/api/v1/notifications', {
+      const res  = await fetch(`${API_BASE}/notifications`, {
         headers: { Accept:'application/json', Authorization:`Bearer ${token}` },
       })
       const json = await res.json()
@@ -255,7 +257,7 @@ function Topbar({ bp, onMenuOpen, user, clearAuth, navigate }) {
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (!token) return
-    fetch('/api/v1/system-announcements', {
+    fetch(`${API_BASE}/system-announcements`, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
     })
       .then(r => r.json())
@@ -286,7 +288,7 @@ function Topbar({ bp, onMenuOpen, user, clearAuth, navigate }) {
     setSubmitting(true)
     try {
       const token = localStorage.getItem('token')
-      const res = await fetch('/api/v1/feedback', {
+      const res = await fetch(`${API_BASE}/feedback`, {
         method: 'POST',
         headers: { Authorization:`Bearer ${token}`, 'Content-Type':'application/json', Accept:'application/json' },
         body: JSON.stringify(feedback),
@@ -674,7 +676,7 @@ export default function Layout() {
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (!token) return
-    fetch('/api/v1/settings', {
+    fetch(`${API_BASE}/settings`, {
       headers: { Accept:'application/json', Authorization:`Bearer ${token}` },
     })
       .then(r => r.json())
@@ -696,7 +698,7 @@ export default function Layout() {
     const token = localStorage.getItem('token')
     if (!token) return
     const headers = { Accept: 'application/json', Authorization: `Bearer ${token}` }
-    fetch('/api/v1/dashboard/stats', { headers })
+    fetch(`${API_BASE}/dashboard/stats`, { headers })
       .then(r => r.json())
       .then(json => {
         setStudentCount(json.data?.students?.total ?? 0)

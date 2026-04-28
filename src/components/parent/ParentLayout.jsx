@@ -4,6 +4,8 @@ import useAuthStore from '../../store/authStore'
 import useParentStore from '../../store/parentStore'
 import { logout } from '../../api/auth'
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
+
 const PARENT_NAV = [
   { path: '/parent/dashboard', icon: '🏠', label: 'Home'     },
   { path: '/parent/fees',      icon: '💰', label: 'Fees'     },
@@ -56,7 +58,7 @@ export default function ParentLayout() {
     if (!token) return
     setNotifsLoading(true)
     try {
-      const res  = await fetch('/api/v1/notifications', {
+      const res  = await fetch(`${API_BASE}/notifications`, {
         headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
       })
       const json = await res.json()
