@@ -23,18 +23,16 @@ async function apiFetch(path, options = {}) {
 }
 
 // ── Constants ─────────────────────────────────────────────────
-// P/A/L → API status names
-const KEY_TO_STATUS = { P: 'Present', A: 'Absent', L: 'Late' };
-// API status names → P/A/L  (Late and Leave both show as L in the grid)
-const STATUS_TO_KEY = { Present: 'P', Absent: 'A', Late: 'L', Leave: 'L', 'Half Day': 'A' };
+// P/A → API status names
+const KEY_TO_STATUS = { P: 'Present', A: 'Absent' };
+// API status names → P/A  (legacy Late/Leave/Half Day collapse to closest match)
+const STATUS_TO_KEY = { Present: 'P', Absent: 'A', Late: 'P', Leave: 'A', 'Half Day': 'P' };
 
-// Holiday removed — only P / A / L
 const ATT = {
   P: { label:"Present", short:"P", c:"#059669", bg:"#D1FAE5", border:"#6EE7B7" },
   A: { label:"Absent",  short:"A", c:"#DC2626", bg:"#FEE2E2", border:"#FCA5A5" },
-  L: { label:"Leave",   short:"L", c:"#D97706", bg:"#FEF3C7", border:"#FCD34D" },
 };
-const CYCLE = ["P","A","L"];
+const CYCLE = ["P","A"];
 
 // ── Helpers ───────────────────────────────────────────────────
 const todayStr    = () => new Date().toISOString().slice(0,10);
@@ -682,7 +680,7 @@ export default function Attendance() {
               <table style={{ width:"100%", borderCollapse:"collapse" }}>
                 <thead>
                   <tr style={{ background:"#F8FAFC", borderBottom:"2px solid #E2E8F0" }}>
-                    {["Student","Total Days","Present","Absent","Late","Leave","Attendance %","Alert"].map(h=>(
+                    {["Student","Total Days","Present","Absent","Attendance %","Alert"].map(h=>(
                       <th key={h} style={{ padding:"11px 14px", textAlign:"left", fontSize:10, fontWeight:800,
                         color:"#64748B", textTransform:"uppercase", letterSpacing:0.6, whiteSpace:"nowrap" }}>{h}</th>
                     ))}
@@ -690,7 +688,7 @@ export default function Attendance() {
                 </thead>
                 <tbody>
                   {monthReport.length === 0
-                    ? <tr><td colSpan={8} style={{ padding:40, textAlign:"center", color:"#94A3B8", fontSize:13 }}>
+                    ? <tr><td colSpan={6} style={{ padding:40, textAlign:"center", color:"#94A3B8", fontSize:13 }}>
                         No attendance data for this month yet.
                       </td></tr>
                     : monthReport.map(r => {
@@ -724,14 +722,6 @@ export default function Attendance() {
                             <td style={{ padding:"10px 14px", textAlign:"center" }}>
                               <span style={{ background:"#FEE2E2", color:"#DC2626", padding:"3px 10px",
                                 borderRadius:6, fontSize:11, fontWeight:800 }}>{r.absent}</span>
-                            </td>
-                            <td style={{ padding:"10px 14px", textAlign:"center" }}>
-                              <span style={{ background:"#FEF3C7", color:"#D97706", padding:"3px 10px",
-                                borderRadius:6, fontSize:11, fontWeight:800 }}>{r.late ?? 0}</span>
-                            </td>
-                            <td style={{ padding:"10px 14px", textAlign:"center" }}>
-                              <span style={{ background:"#EEF2FF", color:"#6366F1", padding:"3px 10px",
-                                borderRadius:6, fontSize:11, fontWeight:800 }}>{r.leave ?? 0}</span>
                             </td>
                             <td style={{ padding:"10px 14px", textAlign:"center" }}>
                               <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
