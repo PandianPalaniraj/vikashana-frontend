@@ -6,7 +6,7 @@ import { SUBJECTS, SECTIONS, BLOOD_GROUPS, GENDERS, SCHOOL } from '../../constan
 import ToastUI from '../../components/ui/Toast'
 
 // ── API ───────────────────────────────────────────────────────
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
+const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
 const apiFetch = (path, opts = {}) => {
   const token = localStorage.getItem('token')
   return fetch(`${BASE}${path}`, {

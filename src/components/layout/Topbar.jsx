@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import useAuthStore from '../../store/authStore'
 
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
+const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
 const fetchNotifs = () => {
   const token = localStorage.getItem('token')
   return fetch(`${BASE}/notifications`, {

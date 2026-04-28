@@ -12,7 +12,7 @@
 //   with the same 5 tabs and icons.
 // ─────────────────────────────────────────────────────────────
 
-const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
+const BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
 
 const authHeaders = () => ({
   'Authorization': `Bearer ${localStorage.getItem('token')}`,

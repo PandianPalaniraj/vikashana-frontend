@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useBreakpoint } from '../../hooks/responsive.jsx'
 import useAuthStore from '../../store/authStore'
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 async function apiFetch(path) {
   const token = localStorage.getItem('token');

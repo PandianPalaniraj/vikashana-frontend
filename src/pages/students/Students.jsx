@@ -8,7 +8,7 @@ const BLOOD_GROUPS = ["A+","A-","B+","B-","AB+","AB-","O+","O-"];
 const GENDERS      = ["Male","Female","Other"];
 const PAGE_SIZE    = 8;
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 async function apiFetch(path, options = {}) {
   const token = localStorage.getItem('token');

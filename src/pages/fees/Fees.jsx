@@ -12,7 +12,7 @@ import { fmt, fmtDate, todayStr } from '../../helpers/format'
 import { PAYMENT_MODES, FEE_STATUS_META, SCHOOL } from '../../constants'
 
 // ── API helpers ──────────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8001/api/v1'
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
 
 const apiFetch = async (path, opts = {}) => {
   const token = localStorage.getItem('token')
