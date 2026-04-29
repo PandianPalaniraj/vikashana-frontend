@@ -33,9 +33,9 @@ const QUALIFICATIONS = ["B.Ed","M.Ed","B.Sc B.Ed","M.Sc B.Ed","B.A B.Ed","M.A B.
 const EMPTY_FORM = {
   name:"", gender:"", dob:"", bloodGroup:"", phone:"", email:"",
   address:"", city:"", state:"", pincode:"",
-  empId:"", designation:"", qualification:"", joinDate:"",
+  empId:"", designation:"", qualification:"", experience:"", joinDate:"",
   subjects:[], classes:[], sections:[], status:"Active",
-  photo:null, docs:[], password:"",
+  photo:null, docs:[],
 };
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -850,9 +850,10 @@ export default function Teachers() {
       phone:t.phone||"", email:t.email||"", address:t.address||"",
       city:t.city||"", state:t.state||"", pincode:t.pincode||"",
       empId:t.empId||"", designation:t.designation||"", qualification:t.qualification||"",
-      joinDate:t.joinDate||"", subjects:[...(t.subjects||[])], classes:[...(t.classes||[])],
+      experience:t.experience ?? "", joinDate:t.joinDate||"",
+      subjects:[...(t.subjects||[])], classes:[...(t.classes||[])],
       sections:[...(t.sections||[])], status:t.status||"Active",
-      photo:t.photo||null, docs:t.docs||[], password:"",
+      photo:t.photo||null, docs:t.docs||[],
     });
     setStep(1); setEditId(t.id); setView("form");
   };
@@ -871,9 +872,10 @@ export default function Teachers() {
         phone:form.phone, email:form.email||null,
         address:form.address, city:form.city, state:form.state, pincode:form.pincode,
         empId:form.empId, designation:form.designation, qualification:form.qualification,
+        experience: form.experience === "" ? null : Number(form.experience),
         joinDate:form.joinDate||null, subjects:form.subjects, classes:form.classes,
         sections:form.sections, status:form.status, photo:form.photo,
-        docs:form.docs, password:form.password||null,
+        docs:form.docs,
       };
 
       if (editId) {
@@ -1112,12 +1114,10 @@ export default function Teachers() {
               <FormField label="Date of Birth" field="dob"        type="date"         value={form.dob}        onChange={handleChange}/>
               <FormField label="Blood Group"   field="bloodGroup" opts={BLOOD_GROUPS} value={form.bloodGroup} onChange={handleChange}/>
               <FormField label="Join Date"     field="joinDate"   type="date"         value={form.joinDate}   onChange={handleChange}/>
-              <FormField label="Phone *"       field="phone"      required            value={form.phone}      onChange={handleChange}/>
-              <FormField label="Email"         field="email"      type="email"        value={form.email}      onChange={handleChange}/>
-              {!editId && (
-                <FormField label="Login Password" field="password" type="password" value={form.password}
-                  onChange={handleChange} placeholder="Leave blank to auto-generate"/>
-              )}
+              <FormField label="Phone *"           field="phone"      required            value={form.phone}      onChange={handleChange}/>
+              <FormField label="Email"             field="email"      type="email"        value={form.email}      onChange={handleChange}/>
+              <FormField label="Years of Experience" field="experience" type="number"
+                value={form.experience} onChange={handleChange} placeholder="e.g. 5"/>
               <div style={{ gridColumn:"1/-1" }}>
                 <FormField label="Street Address" field="address" value={form.address} onChange={handleChange} placeholder="House No, Street, Area"/>
               </div>
