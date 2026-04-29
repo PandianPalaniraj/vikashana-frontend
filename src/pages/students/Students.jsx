@@ -328,12 +328,15 @@ function StatusToggle({ status, onToggle }) {
 }
 
 // ── ID Card Modal — OUTSIDE main component ────────────────────
-function IDCardModal({ student, onClose }) {
-  const SCHOOL_NAME    = "Vidya Niketan School";
-  const SCHOOL_ADDRESS = "123, MG Road, Pune - 411001";
-  const SCHOOL_PHONE   = "020-12345678";
-  const SCHOOL_WEBSITE = "www.vidyaniketan.edu.in";
-  const VALID_UNTIL    = "March 2026";
+function IDCardModal({ student, school, acadYear, onClose }) {
+  const SCHOOL_NAME    = school?.name    || '—';
+  const SCHOOL_ADDRESS = school?.address || '';
+  const SCHOOL_PHONE   = school?.phone   || '';
+  const SCHOOL_WEBSITE = school?.website || '';
+  // "Valid until" = end of current academic year, formatted as "Mar 2026"
+  const VALID_UNTIL = acadYear?.end_date
+    ? new Date(acadYear.end_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
+    : (acadYear?.name || '');
 
   const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "—";
 
@@ -657,6 +660,8 @@ export default function Students() {
   const [classes, setClasses]           = useState([]);
   const [sections, setSections]         = useState([]);
   const [academicYearId, setAcYearId]   = useState(null);
+  const [acadYear,    setAcadYear]      = useState(null);
+  const [school,      setSchool]        = useState(null);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState(null);
   const [page, setPage]                 = useState(1);
@@ -753,10 +758,20 @@ export default function Students() {
     try {
       const res = await apiFetch('/academic-years');
       const active = (res.data || []).find(y => y.is_current) || res.data?.[0];
-      if (active) setAcYearId(active.id);
+      if (active) {
+        setAcYearId(active.id);
+        setAcadYear(active);
+      }
     } catch (e) {
       console.error('Failed to load academic year', e);
     }
+  }, []);
+
+  const fetchSchool = useCallback(async () => {
+    try {
+      const res = await apiFetch('/settings');
+      if (res?.data) setSchool(res.data);
+    } catch (_) {}
   }, []);
 
   const fetchWidgetStats = useCallback(async () => {
@@ -774,6 +789,7 @@ export default function Students() {
     fetchSections();
     fetchAcademicYear();
     fetchWidgetStats();
+    fetchSchool();
   }, []);
 
   // Fetch students once classes are loaded (or re-fetch on filter/page changes)
@@ -1224,7 +1240,7 @@ export default function Students() {
         )}
 
         <Toast toast={toast} />
-        {showIdCard && <IDCardModal student={s} onClose={() => setIdCard(false)} />}
+        {showIdCard && <IDCardModal student={s} school={school} acadYear={acadYear} onClose={() => setIdCard(false)} />}
       </div>
     );
   }

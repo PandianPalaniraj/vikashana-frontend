@@ -210,9 +210,16 @@ function MultiToggle({ label, options, value, onChange, color="#6366F1" }) {
 }
 
 // ── ID Card Modal ─────────────────────────────────────────────
-function IDCardModal({ teacher, onClose }) {
+function IDCardModal({ teacher, school, acadYear, onClose }) {
   const palette = ["#6366F1","#10B981","#3B82F6","#F59E0B","#EF4444","#8B5CF6","#06B6D4","#EC4899"];
   const avatarBg = palette[teacher.name.charCodeAt(0) % palette.length];
+
+  const schoolName    = school?.name    || SCHOOL.name;
+  const schoolAddress = school?.address || SCHOOL.address;
+  const schoolPhone   = school?.phone   || SCHOOL.phone;
+  // "2024-25" or fall back to current calendar window
+  const validLabel = acadYear?.name
+    || `${new Date().getFullYear()}-${String((new Date().getFullYear() + 1) % 100).padStart(2,'0')}`;
   const handlePrint = () => {
     const el = document.getElementById("teacher-id-card");
     const win = window.open("","_blank","width=420,height=680");
@@ -238,7 +245,7 @@ function IDCardModal({ teacher, onClose }) {
                 <div style={{ position:"absolute", top:-20, right:-20, width:80, height:80, borderRadius:"50%", background:"rgba(255,255,255,0.06)" }}/>
                 <div style={{ display:"flex", alignItems:"center", gap:10, position:"relative", zIndex:1 }}>
                   <div style={{ width:36, height:36, background:"rgba(255,255,255,0.15)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"center", fontSize:20, flexShrink:0 }}>🏫</div>
-                  <div><div style={{ fontWeight:900, fontSize:13 }}>{SCHOOL.name}</div><div style={{ fontSize:9, opacity:0.7, marginTop:1 }}>{SCHOOL.address}</div></div>
+                  <div><div style={{ fontWeight:900, fontSize:13 }}>{schoolName}</div><div style={{ fontSize:9, opacity:0.7, marginTop:1 }}>{schoolAddress}</div></div>
                 </div>
                 <div style={{ position:"relative", zIndex:1, marginTop:8, paddingTop:8, borderTop:"1px solid rgba(255,255,255,0.12)", textAlign:"center" }}>
                   <span style={{ fontSize:10, fontWeight:800, letterSpacing:2, textTransform:"uppercase", opacity:0.85 }}>Staff Identity Card</span>
@@ -273,13 +280,13 @@ function IDCardModal({ teacher, onClose }) {
                 </div>
               </div>
               <div style={{ background:"linear-gradient(135deg,#0F172A,#1E3A5F)", padding:"8px 16px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                <div><div style={{ fontSize:8, color:"rgba(255,255,255,0.5)", fontWeight:600 }}>VALID</div><div style={{ fontSize:10, color:"#fff", fontWeight:800 }}>2024–25</div></div>
+                <div><div style={{ fontSize:8, color:"rgba(255,255,255,0.5)", fontWeight:600 }}>VALID</div><div style={{ fontSize:10, color:"#fff", fontWeight:800 }}>{validLabel}</div></div>
                 <div style={{ display:"flex", gap:1, alignItems:"flex-end" }}>
                   {[3,5,2,7,4,6,3,8,5,2,6,4,7,3,5,2,6,4,8,3,5,7,2,6].map((h,i)=>(
                     <div key={i} style={{ width:2, height:h*2, background:"rgba(255,255,255,0.7)", borderRadius:1 }}/>
                   ))}
                 </div>
-                <div style={{ textAlign:"right" }}><div style={{ fontSize:8, color:"rgba(255,255,255,0.5)", fontWeight:600 }}>CONTACT</div><div style={{ fontSize:9, color:"#fff", fontWeight:700 }}>{SCHOOL.phone}</div></div>
+                <div style={{ textAlign:"right" }}><div style={{ fontSize:8, color:"rgba(255,255,255,0.5)", fontWeight:600 }}>CONTACT</div><div style={{ fontSize:9, color:"#fff", fontWeight:700 }}>{schoolPhone}</div></div>
               </div>
             </div>
           </div>
@@ -782,6 +789,8 @@ export default function Teachers() {
   const [deleteId, setDeleteId] = useState(null);
   const [deleteName, setDeleteName] = useState("");
   const [credentials, setCredentials] = useState(null);
+  const [school,      setSchool]      = useState(null);
+  const [acadYear,    setAcadYear]    = useState(null);
 
   const handleChange = useCallback((field,value)=>{ setForm(f=>({...f,[field]:value})); },[]);
 
@@ -804,16 +813,23 @@ export default function Teachers() {
 
   useEffect(() => { fetchTeachers(page); }, [page, search, fStatus]);
 
-  // ── Load form option lists once on mount ──────────────────────
+  // ── Load form option lists + school + academic year once on mount ──────
   useEffect(() => {
     Promise.all([
       apiFetch('/subjects'),
       apiFetch('/classes'),
       apiFetch('/sections'),
-    ]).then(([sr, cr, secr]) => {
+      apiFetch('/settings').catch(() => null),
+      apiFetch('/academic-years').catch(() => null),
+    ]).then(([sr, cr, secr, settings, years]) => {
       if (sr?.data)   setSubjectOpts([...new Set(sr.data.map(s => s.name))]);
       if (cr?.data)   setClassOpts(cr.data.map(c => c.name));
       if (secr?.data) setSectionOpts([...new Set(secr.data.map(s => s.name))]);
+      if (settings?.data) setSchool(settings.data);
+      if (years?.data) {
+        const current = years.data.find(y => y.is_current) || years.data[0];
+        if (current) setAcadYear(current);
+      }
     }).catch(() => {});
   }, []);
 
@@ -1043,7 +1059,7 @@ export default function Teachers() {
             </div>
           </div>
         </div>
-        {showIdCard && <IDCardModal teacher={t} onClose={()=>setIdCard(false)}/>}
+        {showIdCard && <IDCardModal teacher={t} school={school} acadYear={acadYear} onClose={()=>setIdCard(false)}/>}
         {deleteId && <DeleteModal name={deleteName} onConfirm={confirmDelete} onCancel={()=>setDeleteId(null)}/>}
         <ToastUI toast={toast}/>
       </div>
