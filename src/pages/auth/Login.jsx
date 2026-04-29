@@ -86,7 +86,7 @@ export default function Login() {
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#F0F4F8' }}>
       <div style={{ background:'#fff', padding:40, borderRadius:16, width:400, boxShadow:'0 4px 24px rgba(0,0,0,0.08)' }}>
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', marginBottom:28 }}>
-          <img src="/logo-primary.svg" alt="Vikashana" style={{ height:110, width:'auto' }} />
+          <img src="/logo.svg" alt="Vikashana" style={{ height:110, width:'auto' }} />
         </div>
 
         {error && (
