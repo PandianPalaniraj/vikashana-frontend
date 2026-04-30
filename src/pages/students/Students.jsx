@@ -819,6 +819,16 @@ export default function Students() {
       .map(s => s.name)
   )];
 
+  // Fee preview for the selected class — shows what invoices will be auto-created
+  const [feePreview, setFeePreview] = useState(null);
+  useEffect(() => {
+    setFeePreview(null);
+    if (!formClassObj?.id || editId) return; // skip on edit
+    apiFetch(`/fee-configs/class/${formClassObj.id}`)
+      .then(r => { if (r.success) setFeePreview(r); })
+      .catch(() => {});
+  }, [formClassObj?.id, editId]);
+
   const refetch = useCallback(() => {
     fetchStudents(search, fClass, fStatus, page);
   }, [search, fClass, fStatus, page, fetchStudents]);
@@ -1327,6 +1337,36 @@ export default function Students() {
               value={form.section} onChange={handleChange} error={formErrors.section} />
             <FormField label="Roll Number / Admission No" field="admission_no" required
               value={form.admission_no} onChange={handleChange} error={formErrors.admission_no} />
+
+            {/* Fee preview — shows what invoices will be auto-created when this student is enrolled */}
+            {!editId && form.class && (
+              <div style={{ gridColumn:"1/-1" }}>
+                {feePreview?.has_config ? (
+                  <div style={{ background:"#ECFDF5", border:"1px solid #6EE7B7", borderRadius:12, padding:16 }}>
+                    <div style={{ fontSize:12, fontWeight:800, color:"#065F46", marginBottom:10, textTransform:"uppercase", letterSpacing:0.8 }}>
+                      ✅ Auto Invoice Preview
+                    </div>
+                    <div style={{ fontSize:12, color:"#047857", marginBottom:10 }}>
+                      The following invoices will be created automatically when this student is enrolled:
+                    </div>
+                    {(feePreview.data || []).map(fee => (
+                      <div key={fee.id} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #A7F3D0", fontSize:13 }}>
+                        <span style={{ color:"#065F46", fontWeight:600 }}>{fee.term} — {fee.fee_type}</span>
+                        <span style={{ color:"#059669", fontWeight:800 }}>₹{Number(fee.amount).toLocaleString("en-IN")}</span>
+                      </div>
+                    ))}
+                    <div style={{ display:"flex", justifyContent:"space-between", marginTop:10, paddingTop:8, borderTop:"2px solid #6EE7B7" }}>
+                      <span style={{ fontWeight:800, color:"#065F46", fontSize:14 }}>Total Fees</span>
+                      <span style={{ fontWeight:900, color:"#059669", fontSize:16 }}>₹{Number(feePreview.total_amount || 0).toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+                ) : feePreview && !feePreview.has_config ? (
+                  <div style={{ background:"#FFFBEB", border:"1px solid #FCD34D", borderRadius:12, padding:12, fontSize:12, color:"#92400E" }}>
+                    ⚠️ No fee config for this class yet. Go to <strong>Fees → Fee Config</strong> to set it up.
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         )}
 

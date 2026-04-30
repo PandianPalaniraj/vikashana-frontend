@@ -7,6 +7,7 @@ import Avatar from '../../components/ui/Avatar'
 import Toast from '../../components/ui/Toast'
 import WABtn from '../../components/ui/WABtn'
 import FeeSettingsModal from './FeeSettingsModal'
+import FeeConfigTab from './FeeConfigTab'
 import { openWA, invMsg, rcptMsg, printInvoicePDF, printReceiptPDF } from './feeHelpers'
 import { fmt, fmtDate, todayStr } from '../../helpers/format'
 import { PAYMENT_MODES, FEE_STATUS_META, SCHOOL } from '../../constants'
@@ -417,7 +418,7 @@ export default function Fees() {
     {/* Tabs */}
     <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
       <div style={{ background: '#F1F5F9', borderRadius: 8, padding: 4, display: 'flex', gap: 4 }}>
-        {[['invoices','📄 Invoices'], ['payments','💳 Payments'], ['receipts','🧾 Receipts']].map(([v, l]) => (
+        {[['invoices','📄 Invoices'], ['payments','💳 Payments'], ['receipts','🧾 Receipts'], ['config','⚙️ Fee Config']].map(([v, l]) => (
           <button key={v} onClick={() => { setView(v); if (v === 'payments' || v === 'receipts') fetchPayInvs() }} style={{ padding: '6px 13px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: view === v ? '#fff' : 'transparent', color: view === v ? '#6366F1' : '#64748B', boxShadow: view === v ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
             {l}
             {v === 'receipts' && rcptRows.filter(r => !r.inv.rcpt_sent).length > 0 && <span style={{ marginLeft: 4, background: '#F59E0B', color: '#fff', borderRadius: 99, fontSize: 9, padding: '1px 5px', fontWeight: 800 }}>{rcptRows.filter(r => !r.inv.rcpt_sent).length}</span>}
@@ -506,6 +507,7 @@ export default function Fees() {
     )}
     {view === 'payments' && <><div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: '#1E40AF', fontWeight: 600 }}>💳 Payment transactions — use for daily cash reconciliation</div>{loadingPay ? <div style={{ background: '#fff', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody></table></div> : <DataTable columns={pCols} data={payRows} emptyMsg='No payments yet' />}</>}
     {view === 'receipts' && <><div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: '#065F46', fontWeight: 600 }}>🧾 Send payment receipts to parents via WhatsApp</div>{loadingPay ? <div style={{ background: '#fff', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody></table></div> : <DataTable columns={rCols} data={rcptRows} emptyMsg='No receipts yet' />}</>}
+    {view === 'config' && <FeeConfigTab showToast={showToast} isMobile={isMobile} />}
 
     {/* ── Create Invoice Modal ─────────────────────────────────────────────── */}
     {createM && (

@@ -454,7 +454,29 @@ function UsersRoles({ showToast, isMobile }) {
   );
 }
 
-// ── Fee Configuration Section ─────────────────────────────────
+// ── Fee Configuration: redirect note ──────────────────────────
+// The actual fee-config UI now lives in Fees → Fee Config tab so it
+// sits next to invoices and payments. This component just points
+// users at the new home.
+function FeeConfigRedirect() {
+  return (
+    <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 12, padding: 18, display: 'flex', alignItems: 'center', gap: 14 }}>
+      <span style={{ fontSize: 28 }}>⚙️</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 700, color: '#4338CA', fontSize: 15 }}>Fee Configuration has moved</div>
+        <div style={{ fontSize: 13, color: '#6366F1', marginTop: 4, lineHeight: 1.5 }}>
+          Define class-wise fee structures from <strong>Fees → Fee Config</strong>. New fee configs will auto-create invoices when students are enrolled.
+        </div>
+      </div>
+      <a href="/fees" style={{ background: '#6366F1', color: '#fff', borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+        Go to Fees →
+      </a>
+    </div>
+  )
+}
+
+// ── Legacy Fee Configuration Section (kept for reference, no longer rendered) ──
+// eslint-disable-next-line no-unused-vars
 function FeeConfig({ showToast, isMobile }) {
   const [fees,       setFees]       = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -1428,7 +1450,7 @@ export default function Settings() {
           {activeSection==="school"       && <SchoolInfo        showToast={showToast} isMobile={isMobile}/>}
           {activeSection==="academic"     && <AcademicYears    showToast={showToast} isMobile={isMobile}/>}
           {activeSection==="users"        && <UsersRoles       showToast={showToast} isMobile={isMobile}/>}
-          {activeSection==="fees"         && <FeeConfig        showToast={showToast} isMobile={isMobile}/>}
+          {activeSection==="fees"         && <FeeConfigRedirect />}
           {activeSection==="branding"     && <Branding         showToast={showToast} isMobile={isMobile}/>}
           {activeSection==="subscription" && <SubscriptionSection showToast={showToast} isMobile={isMobile} onOpenFeedback={() => setShowFeedback(true)}/>}
           {activeSection==="invoices"     && <MyInvoicesSection showToast={showToast} isMobile={isMobile}/>}
