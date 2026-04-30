@@ -157,16 +157,146 @@ function HWCard({ hw, onDelete, onWhatsApp, onEdit, onArchive, isMobile }) {
   );
 }
 
+// ── Smart grouping ─────────────────────────────────────────────
+const GROUP_META = {
+  'Pending Review': { c:'#F59E0B', bg:'#FFFBEB' },
+  'Due Today':      { c:'#EF4444', bg:'#FEF2F2' },
+  'Due Tomorrow':   { c:'#F97316', bg:'#FFF7ED' },
+  'This Week':      { c:'#6366F1', bg:'#EEF2FF' },
+  'This Month':     { c:'#3B82F6', bg:'#EFF6FF' },
+  'Later':          { c:'#10B981', bg:'#ECFDF5' },
+  'Archived':       { c:'#94A3B8', bg:'#F8FAFC' },
+};
+
+function groupHomework(list, mode) {
+  if (mode === 'none') {
+    return [{ title: 'All Homework', items: list }];
+  }
+  if (mode === 'class' || mode === 'subject') {
+    const key = mode === 'class' ? 'class' : 'subject';
+    const buckets = {};
+    list.forEach(hw => {
+      const k = hw[key] || (mode === 'class' ? 'No Class' : 'No Subject');
+      (buckets[k] ||= []).push(hw);
+    });
+    return Object.entries(buckets)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([title, items]) => ({ title, items }));
+  }
+
+  // Default: group by week / time horizon
+  const today    = new Date(todayStr() + 'T00:00:00');
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1);
+  const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + 7);
+  const nextMonth = new Date(today); nextMonth.setDate(today.getDate() + 30);
+
+  const buckets = {
+    'Pending Review': [],
+    'Due Today':      [],
+    'Due Tomorrow':   [],
+    'This Week':      [],
+    'This Month':     [],
+    'Later':          [],
+    'Archived':       [],
+  };
+
+  list.forEach(hw => {
+    if (hw.is_archived) { buckets['Archived'].push(hw); return; }
+    if (!hw.dueDate)    { buckets['Later'].push(hw);    return; }
+    const due = new Date(hw.dueDate + 'T00:00:00');
+    if      (due < today)                    buckets['Pending Review'].push(hw);
+    else if (due.getTime() === today.getTime())    buckets['Due Today'].push(hw);
+    else if (due.getTime() === tomorrow.getTime()) buckets['Due Tomorrow'].push(hw);
+    else if (due <= nextWeek)                buckets['This Week'].push(hw);
+    else if (due <= nextMonth)               buckets['This Month'].push(hw);
+    else                                     buckets['Later'].push(hw);
+  });
+
+  return Object.entries(buckets)
+    .filter(([, items]) => items.length > 0)
+    .map(([title, items]) => ({ title, items }));
+}
+
+// ── Group section (collapsible header + cards) ────────────────
+function HomeworkGroup({ title, items, single, onDelete, onWhatsApp, onEdit, onArchive, isMobile }) {
+  const [collapsed, setCollapsed] = useState(title === 'Archived');
+  const meta = GROUP_META[title] || { c:'#64748B', bg:'#F8FAFC' };
+
+  return (
+    <div style={{ marginBottom:18 }}>
+      {!single && (
+        <button onClick={() => setCollapsed(c => !c)}
+          style={{ width:'100%',display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',background:meta.bg,border:`1px solid ${meta.c}33`,borderRadius:collapsed?12:'12px 12px 0 0',cursor:'pointer',marginBottom:collapsed?0:0 }}>
+          <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+            <span style={{ background:meta.c,color:'#fff',borderRadius:20,padding:'2px 10px',fontSize:12,fontWeight:700,minWidth:24,textAlign:'center' }}>{items.length}</span>
+            <span style={{ fontSize:14,fontWeight:800,color:meta.c }}>{title}</span>
+          </div>
+          <span style={{ color:meta.c,fontWeight:700,fontSize:14 }}>{collapsed ? '▼' : '▲'}</span>
+        </button>
+      )}
+      {!collapsed && (
+        <div style={{ display:'grid',gridTemplateColumns:isMobile?'1fr':'repeat(auto-fill,minmax(300px,1fr))',gap:14,padding:single?0:14,border:single?'none':`1px solid ${meta.c}22`,borderTop:'none',borderRadius:single?0:'0 0 12px 12px',background:single?'transparent':'#fff' }}>
+          {items.map(hw => (
+            <HWCard key={hw.id} hw={hw} onDelete={onDelete} onWhatsApp={onWhatsApp} onEdit={onEdit} onArchive={onArchive} isMobile={isMobile}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Numbered Pagination ────────────────────────────────────────
+const pgBtn = (active, disabled) => ({
+  width:36,height:36,borderRadius:8,
+  border:active?'none':'1px solid #E2E8F0',
+  background:active?'#6366F1':'#fff',
+  color:active?'#fff':disabled?'#CBD5E1':'#374151',
+  fontSize:13,fontWeight:active?700:500,
+  cursor:disabled?'not-allowed':'pointer',
+  opacity:disabled?0.5:1,
+});
+
+function Pagination({ meta, onPageChange }) {
+  if (!meta || (meta.last_page ?? 1) <= 1) return null;
+  const cur = meta.current_page ?? meta.page ?? 1;
+  const last = meta.last_page;
+  const start = Math.max(1, cur - 2);
+  const end   = Math.min(last, cur + 2);
+  const pages = [];
+  for (let i = start; i <= end; i++) pages.push(i);
+
+  return (
+    <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'16px 0',marginTop:8,flexWrap:'wrap',gap:12 }}>
+      <span style={{ fontSize:13,color:'#94A3B8' }}>
+        Showing {meta.from ?? 0}–{meta.to ?? 0} of {meta.total}
+      </span>
+      <div style={{ display:'flex',gap:6,alignItems:'center' }}>
+        <button onClick={()=>onPageChange(cur-1)} disabled={cur<=1} style={pgBtn(false,cur<=1)}>←</button>
+        {start > 1 && (<>
+          <button onClick={()=>onPageChange(1)} style={pgBtn(false,false)}>1</button>
+          {start > 2 && <span style={{ color:'#94A3B8' }}>…</span>}
+        </>)}
+        {pages.map(p => (
+          <button key={p} onClick={()=>onPageChange(p)} style={pgBtn(p===cur,false)}>{p}</button>
+        ))}
+        {end < last && (<>
+          {end < last - 1 && <span style={{ color:'#94A3B8' }}>…</span>}
+          <button onClick={()=>onPageChange(last)} style={pgBtn(false,false)}>{last}</button>
+        </>)}
+        <button onClick={()=>onPageChange(cur+1)} disabled={cur>=last} style={pgBtn(false,cur>=last)}>→</button>
+      </div>
+    </div>
+  );
+}
+
 // ── Assignments Tab ───────────────────────────────────────────
-function AssignmentsTab({ homework, meta, counts, loading, error, filters, setFilters, onDelete, onWhatsApp, onEdit, onArchive, onArchiveAllPending, classes, isMobile }) {
-  const [search, setSearch] = useState("");
+function AssignmentsTab({ homework, meta, counts, loading, error, filters, applyFilters, searchInput, setSearchInput, onDelete, onWhatsApp, onEdit, onArchive, onArchiveAllPending, onLoadMore, classes, isMobile }) {
+  const [groupBy, setGroupBy] = useState('week'); // week | class | subject | none
 
-  const displayed = search
-    ? homework.filter(h => h.title.toLowerCase().includes(search.toLowerCase()) || h.subject.toLowerCase().includes(search.toLowerCase()))
-    : homework;
-
-  // Backend already filters by status; keep client-side sort by due date desc
-  const sorted = [...displayed].sort((a,b) => new Date(b.dueDate) - new Date(a.dueDate));
+  // Server already paginated + filtered; we only group client-side over the
+  // current page's slice. That avoids re-paginating each group.
+  const groups = groupHomework(homework, groupBy);
+  const single = groups.length === 1;
 
   const STATUS_TABS = [
     ["all",      `📚 All (${counts.total})`,                "#6366F1","#EEF2FF"],
@@ -180,7 +310,7 @@ function AssignmentsTab({ homework, meta, counts, loading, error, filters, setFi
       {/* Status quick filters */}
       <div style={{ display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center" }}>
         {STATUS_TABS.map(([val,label,color,bg])=>(
-          <button key={val} onClick={()=>setFilters(f=>({...f,status:val,page:1}))}
+          <button key={val} onClick={()=>applyFilters({ status: val })}
             style={{ padding:isMobile?"6px 10px":"8px 16px",borderRadius:9,border:`1.5px solid ${filters.status===val?color:"#E2E8F0"}`,background:filters.status===val?bg:"#fff",color:filters.status===val?color:"#64748B",fontSize:isMobile?11:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>
             {label}
           </button>
@@ -197,14 +327,25 @@ function AssignmentsTab({ homework, meta, counts, loading, error, filters, setFi
       <div style={{ display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",background:"#fff",borderRadius:12,padding:12,boxShadow:"0 1px 6px rgba(0,0,0,0.06)" }}>
         <div style={{ position:"relative",flex:1,minWidth:180 }}>
           <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94A3B8",fontSize:13 }}>🔍</span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search homework…"
+          <input value={searchInput} onChange={e=>setSearchInput(e.target.value)} placeholder="Search homework…"
             style={{ width:"100%",paddingLeft:30,paddingRight:10,paddingTop:8,paddingBottom:8,borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit" }}/>
         </div>
-        <select value={filters.class_id||""} onChange={e=>setFilters(f=>({...f,class_id:e.target.value||null,page:1}))}
+        <select value={filters.class_id||""} onChange={e=>applyFilters({ class_id: e.target.value || null })}
           style={{ flex:1,minWidth:isMobile?80:120,padding:"8px 10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",color:"#374151",fontWeight:600,background:"#fff" }}>
           <option value="">All Classes</option>
           {classes.map(c=><option key={c.id} value={c.id}>Class {c.name}</option>)}
         </select>
+      </div>
+
+      {/* Group By selector */}
+      <div style={{ display:'flex',gap:8,marginBottom:16,alignItems:'center',flexWrap:'wrap' }}>
+        <span style={{ fontSize:12,color:'#94A3B8',fontWeight:600 }}>Group by:</span>
+        {[['week','Week'],['class','Class'],['subject','Subject'],['none','None']].map(([g,lbl]) => (
+          <button key={g} onClick={() => setGroupBy(g)}
+            style={{ padding:'4px 12px',borderRadius:20,border:'1px solid #E2E8F0',background:groupBy===g?'#6366F1':'#fff',color:groupBy===g?'#fff':'#64748B',fontSize:12,fontWeight:600,cursor:'pointer' }}>
+            {lbl}
+          </button>
+        ))}
       </div>
 
       {/* Error */}
@@ -215,33 +356,33 @@ function AssignmentsTab({ homework, meta, counts, loading, error, filters, setFi
       )}
 
       {/* Cards */}
-      {loading
+      {loading && homework.length === 0
         ? <div style={{ display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:14 }}>
             {Array.from({length:6},(_,i)=><SkeletonCard key={i}/>)}
           </div>
-        : sorted.length===0
+        : groups.length===0
           ? <div style={{ textAlign:"center",padding:56,color:"#94A3B8",fontSize:14,background:"#fff",borderRadius:14 }}>
               <div style={{ fontSize:48,marginBottom:12 }}>📭</div>No homework found for the selected filters
             </div>
-          : <div style={{ display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:14 }}>
-              {sorted.map(hw=><HWCard key={hw.id} hw={hw} onDelete={onDelete} onWhatsApp={onWhatsApp} onEdit={onEdit} onArchive={onArchive} isMobile={isMobile}/>)}
-            </div>
+          : groups.map(g => (
+              <HomeworkGroup key={g.title} title={g.title} items={g.items} single={single}
+                onDelete={onDelete} onWhatsApp={onWhatsApp} onEdit={onEdit} onArchive={onArchive}
+                isMobile={isMobile}/>
+            ))
       }
 
       {/* Pagination */}
-      {meta.last_page > 1 && (
-        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:20,background:"#fff",borderRadius:12,padding:"12px 16px",boxShadow:"0 1px 6px rgba(0,0,0,0.06)" }}>
-          <span style={{ fontSize:12,color:"#64748B" }}>
-            Showing {((filters.page||1)-1)*meta.per_page+1}–{Math.min((filters.page||1)*meta.per_page,meta.total)} of {meta.total}
-          </span>
-          <div style={{ display:"flex",gap:8 }}>
-            <button disabled={(filters.page||1)<=1} onClick={()=>setFilters(f=>({...f,page:(f.page||1)-1}))}
-              style={{ padding:"6px 14px",borderRadius:8,border:"1px solid #E2E8F0",background:(filters.page||1)<=1?"#F8FAFC":"#fff",color:(filters.page||1)<=1?"#CBD5E1":"#374151",fontSize:12,fontWeight:700,cursor:(filters.page||1)<=1?"not-allowed":"pointer" }}>← Prev</button>
-            <span style={{ padding:"6px 14px",fontSize:12,fontWeight:700,color:"#6366F1" }}>Page {filters.page||1} / {meta.last_page}</span>
-            <button disabled={(filters.page||1)>=meta.last_page} onClick={()=>setFilters(f=>({...f,page:(f.page||1)+1}))}
-              style={{ padding:"6px 14px",borderRadius:8,border:"1px solid #E2E8F0",background:(filters.page||1)>=meta.last_page?"#F8FAFC":"#fff",color:(filters.page||1)>=meta.last_page?"#CBD5E1":"#374151",fontSize:12,fontWeight:700,cursor:(filters.page||1)>=meta.last_page?"not-allowed":"pointer" }}>Next →</button>
-          </div>
-        </div>
+      <Pagination meta={meta} onPageChange={(p) => {
+        applyFilters({ page: p });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }}/>
+
+      {/* Load more — append next page without losing current items */}
+      {meta?.has_more && onLoadMore && (
+        <button onClick={onLoadMore} disabled={loading}
+          style={{ width:'100%',padding:14,background:'#F8FAFC',border:'1px solid #E2E8F0',borderRadius:12,fontSize:13,fontWeight:600,color:'#6366F1',cursor:loading?'not-allowed':'pointer',marginTop:8,opacity:loading?0.6:1 }}>
+          {loading ? 'Loading…' : `Load More (${(meta.total ?? 0) - homework.length} remaining)`}
+        </button>
       )}
     </div>
   );
@@ -422,25 +563,27 @@ export default function Homework() {
   const [tab, setTab]         = useState("assignments")
   const [editingHW, setEditing] = useState(null)
   const [toast, setToast]     = useState(null)
-  const [filters, setFilters] = useState({ status:"all", class_id:null, page:1, per_page:20 })
+  const [filters, setFilters] = useState({ status:"all", class_id:null, search:"", page:1, per_page:15 })
 
   const showToast = (msg, type="success") => { setToast({msg,type}); setTimeout(()=>setToast(null),3500); }
   const switchTab = (t) => { if(t!=="edit") setEditing(null); setTab(t); }
 
   // ── Fetch homework ────────────────────────────────────────────
-  const fetchHomework = useCallback(async (f) => {
+  // append=true → "Load more" appends to existing list; false → replaces.
+  const fetchHomework = useCallback(async (f, append = false) => {
     setLoading(true); setError(null);
     try {
-      const params = new URLSearchParams({ per_page: f.per_page||20, page: f.page||1 });
+      const params = new URLSearchParams({ per_page: f.per_page||15, page: f.page||1 });
       if (f.class_id) params.set('class_id', f.class_id);
+      if (f.search)   params.set('search',   f.search);
       // 'all' => backend defaults to non-archived; 'active'/'pending'/'archived' map directly.
       if (f.status && f.status !== "all") params.set('status', f.status);
 
       const res = await apiFetch(`/homework?${params}`);
       const data = (res.data || []).map(normalize);
 
-      setHomework(data);
-      setMeta(res.meta || { page:1, per_page:20, total:data.length, last_page:1 });
+      setHomework(prev => append ? [...prev, ...data] : data);
+      setMeta(res.meta || { page:1, per_page:15, total:data.length, last_page:1, has_more:false });
       setCounts(res.counts || { total:0, active:0, pending:0, archived:0 });
     } catch(e) {
       setError(e.message);
@@ -448,6 +591,26 @@ export default function Homework() {
       setLoading(false);
     }
   }, []);
+
+  // Wraps setFilters + fetch so callers don't have to manage both. Any
+  // change to status/class/search resets to page 1.
+  const applyFilters = useCallback((overrides) => {
+    const resetsPage = ['status', 'class_id', 'search'].some(k => k in overrides);
+    setFilters(prev => {
+      const next = { ...prev, ...overrides, page: resetsPage ? 1 : (overrides.page ?? prev.page) };
+      fetchHomework(next, false);
+      return next;
+    });
+  }, [fetchHomework]);
+
+  const handleLoadMore = useCallback(() => {
+    if (loading || !meta?.has_more) return;
+    setFilters(prev => {
+      const next = { ...prev, page: (prev.page || 1) + 1 };
+      fetchHomework(next, true);  // append
+      return next;
+    });
+  }, [loading, meta, fetchHomework]);
 
   const fetchClasses  = useCallback(async () => {
     try { const r = await apiFetch('/classes'); setClasses(r.data||[]); } catch(e) {}
@@ -457,8 +620,22 @@ export default function Homework() {
     try { const r = await apiFetch('/teachers?per_page=100'); setTeachers(r.data||[]); } catch(e) {}
   }, []);
 
-  useEffect(() => { fetchClasses(); fetchTeachers(); }, []);
-  useEffect(() => { fetchHomework(filters); }, [filters]);
+  useEffect(() => {
+    fetchClasses();
+    fetchTeachers();
+    fetchHomework(filters, false);
+    // mount only — subsequent fetches go through applyFilters / handleLoadMore
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Search input is controlled by `searchInput` (instant) but only
+  // dispatches a request after 350ms of no typing.
+  const [searchInput, setSearchInput] = useState("");
+  useEffect(() => {
+    if (searchInput === filters.search) return;
+    const id = setTimeout(() => applyFilters({ search: searchInput }), 350);
+    return () => clearTimeout(id);
+  }, [searchInput, filters.search, applyFilters]);
 
   // ── Handlers ──────────────────────────────────────────────────
   const handleCreate = async (form) => {
@@ -476,7 +653,7 @@ export default function Homework() {
     });
     showToast(`Homework assigned: ${res.data.title}`);
     switchTab("assignments");
-    setFilters(f => ({...f, page:1}));
+    applyFilters({ status: filters.status }); // refetch from page 1
   };
 
   const handleEdit = async (form) => {
@@ -490,7 +667,7 @@ export default function Homework() {
     });
     showToast("Homework updated");
     switchTab("assignments");
-    setFilters(f => ({...f}));
+    fetchHomework(filters, false);
   };
 
   const handleDelete = async (id) => {
@@ -498,7 +675,7 @@ export default function Homework() {
       await apiFetch(`/homework/${id}`, { method:'DELETE' });
       setHomework(p => p.filter(h => h.id !== id));
       showToast("Homework deleted");
-      setFilters(f => ({...f})); // refetch for fresh counts
+      fetchHomework(filters, false); // refetch for fresh counts
     } catch(e) { showToast(e.message, "error"); }
   };
 
@@ -506,7 +683,7 @@ export default function Homework() {
     try {
       await apiFetch(`/homework/${id}/archive`, { method:'POST' });
       showToast("Homework archived");
-      setFilters(f => ({...f})); // refetch
+      fetchHomework(filters, false); // refetch
     } catch(e) { showToast(e.message, "error"); }
   };
 
@@ -515,7 +692,7 @@ export default function Homework() {
     try {
       const res = await apiFetch('/homework/archive-pending', { method:'POST' });
       showToast(res.message || `${res.count} homework archived`);
-      setFilters(f => ({...f})); // refetch
+      fetchHomework(filters, false); // refetch
     } catch(e) { showToast(e.message, "error"); }
   };
 
@@ -606,9 +783,10 @@ export default function Homework() {
       {tab==="assignments" && (
         <AssignmentsTab
           homework={homework} meta={meta} counts={counts} loading={loading} error={error}
-          filters={filters} setFilters={setFilters}
+          filters={filters} applyFilters={applyFilters}
+          searchInput={searchInput} setSearchInput={setSearchInput}
           onDelete={handleDelete} onWhatsApp={handleWhatsApp} onArchive={handleArchive}
-          onArchiveAllPending={handleArchiveAllPending}
+          onArchiveAllPending={handleArchiveAllPending} onLoadMore={handleLoadMore}
           onEdit={hw=>{ setEditing(hw); switchTab("edit"); }}
           classes={classes} isMobile={isMobile}/>
       )}
