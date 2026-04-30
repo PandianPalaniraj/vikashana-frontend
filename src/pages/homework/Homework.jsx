@@ -22,11 +22,6 @@ const apiFetch = (path, opts = {}) => {
 }
 
 // ── Constants ─────────────────────────────────────────────────
-const PRIORITY_META = {
-  routine:   { label:"Routine",   color:"#64748B", bg:"#F1F5F9", icon:"📝" },
-  important: { label:"Important", color:"#F59E0B", bg:"#FFFBEB", icon:"⭐" },
-  urgent:    { label:"Urgent",    color:"#EF4444", bg:"#FEF2F2", icon:"🔴" },
-};
 const palette = ["#6366F1","#10B981","#3B82F6","#F59E0B","#EF4444","#8B5CF6","#06B6D4","#EC4899"];
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -38,19 +33,17 @@ function isDueToday(dueDate) { return dueDate === todayStr(); }
 function daysLeft(dueDate) {
   return Math.ceil((new Date(dueDate) - new Date(todayStr())) / (1000*60*60*24));
 }
-function dueBadge(dueDate) {
-  if (isOverdue(dueDate))  return { text:"Overdue",       color:"#EF4444", bg:"#FEF2F2" };
-  if (isDueToday(dueDate)) return { text:"Due Today",     color:"#F59E0B", bg:"#FFFBEB" };
-  const d = daysLeft(dueDate);
-  if (d===1) return { text:"Due Tomorrow", color:"#8B5CF6", bg:"#F5F3FF" };
-  return { text:`Due in ${d} days`, color:"#10B981", bg:"#ECFDF5" };
-}
 
-function derivePriority(dueDate, status) {
-  if (status !== 'Active' || !dueDate) return 'routine';
-  if (isOverdue(dueDate))  return 'urgent';
-  if (daysLeft(dueDate) <= 1) return 'important';
-  return 'routine';
+// New 3-state badge: Archived | Pending Review (past due) | Active sub-state.
+function statusBadge(hw) {
+  if (hw.is_archived) return { text:"📦 Archived",       color:"#64748B", bg:"#F1F5F9" };
+  const due = hw.dueDate || '';
+  if (!due)            return { text:"📚 Active",         color:"#10B981", bg:"#ECFDF5" };
+  if (isOverdue(due))  return { text:"⏳ Pending Review", color:"#F59E0B", bg:"#FFFBEB" };
+  if (isDueToday(due)) return { text:"📅 Due Today",      color:"#EF4444", bg:"#FEF2F2" };
+  const d = daysLeft(due);
+  if (d===1)           return { text:"📅 Due Tomorrow",   color:"#F97316", bg:"#FFF7ED" };
+  return                       { text:`📅 Due in ${d} days`, color:"#10B981", bg:"#ECFDF5" };
 }
 
 // Normalize API shape to what HWCard expects
@@ -67,7 +60,7 @@ function normalize(hw) {
     teacherId: hw.teacher?.id    || null,
     dueDate:   hw.due_date       || '',
     assignedDate: hw.created_at  || '',
-    priority:  derivePriority(hw.due_date, hw.status),
+    is_archived: !!hw.is_archived,
   };
 }
 
@@ -102,16 +95,15 @@ function SkeletonCard() {
 }
 
 // ── HW Card ───────────────────────────────────────────────────
-function HWCard({ hw, onDelete, onWhatsApp, onEdit, isMobile }) {
-  const pm   = PRIORITY_META[hw.priority];
-  const db   = dueBadge(hw.dueDate);
-  const over = isOverdue(hw.dueDate);
-  const done = hw.status === 'Completed';
+function HWCard({ hw, onDelete, onWhatsApp, onEdit, onArchive, isMobile }) {
+  const sb   = statusBadge(hw);
   const sc   = subjectColor(hw.subject);
+  const past = hw.dueDate && isOverdue(hw.dueDate);
+  const archived = hw.is_archived;
   const [confirmDel, setConfirmDel] = useState(false);
 
   return (
-    <div style={{ background:"#fff",borderRadius:14,overflow:"hidden",boxShadow:"0 1px 8px rgba(0,0,0,0.07)",border:`1px solid ${over&&!done?"#FECACA":"#F1F5F9"}`,transition:"transform 0.15s,box-shadow 0.15s",opacity:done?0.8:1 }}
+    <div style={{ background:"#fff",borderRadius:14,overflow:"hidden",boxShadow:"0 1px 8px rgba(0,0,0,0.07)",border:`1px solid ${past && !archived ? "#FCD34D" : "#F1F5F9"}`,transition:"transform 0.15s,box-shadow 0.15s",opacity:archived ? 0.75 : 1 }}
       onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(0,0,0,0.1)";}}
       onMouseLeave={e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="0 1px 8px rgba(0,0,0,0.07)";}}>
       <div style={{ height:4,background:sc }}/>
@@ -120,29 +112,36 @@ function HWCard({ hw, onDelete, onWhatsApp, onEdit, isMobile }) {
         <div style={{ display:"flex",alignItems:"flex-start",gap:12,marginBottom:10 }}>
           <div style={{ width:44,height:44,borderRadius:11,background:sc+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,flexShrink:0 }}>{sIcon(hw.subject)}</div>
           <div style={{ flex:1,minWidth:0 }}>
-            <div style={{ fontWeight:800,fontSize:14,color:"#0F172A",lineHeight:1.3,marginBottom:3,textDecoration:done?"line-through":"none" }}>{hw.title}</div>
+            <div style={{ fontWeight:800,fontSize:14,color:"#0F172A",lineHeight:1.3,marginBottom:3,textDecoration:archived?"line-through":"none" }}>{hw.title}</div>
             <div style={{ display:"flex",gap:7,flexWrap:"wrap",alignItems:"center" }}>
               <span style={{ fontSize:11,fontWeight:700,color:sc,background:sc+"18",padding:"2px 8px",borderRadius:6 }}>{hw.subject}</span>
               <span style={{ fontSize:11,color:"#64748B" }}>Class {hw.class}-{hw.section}</span>
-              {done&&<span style={{ fontSize:10,fontWeight:700,background:"#ECFDF5",color:"#059669",padding:"2px 8px",borderRadius:6 }}>✓ Completed</span>}
-              {isMobile&&<span style={{ background:pm.bg,color:pm.color,padding:"2px 7px",borderRadius:6,fontSize:10,fontWeight:700 }}>{pm.icon} {pm.label}</span>}
               {!isMobile&&<span style={{ fontSize:11,color:"#94A3B8" }}>👩‍🏫 {hw.teacher}</span>}
             </div>
           </div>
-          {!isMobile&&<div style={{ display:"flex",gap:5,flexShrink:0 }}>
-            <span style={{ background:pm.bg,color:pm.color,padding:"3px 9px",borderRadius:8,fontSize:10,fontWeight:700 }}>{pm.icon} {pm.label}</span>
-          </div>}
+          <div style={{ display:"flex",gap:5,flexShrink:0 }}>
+            <span style={{ background:sb.bg,color:sb.color,padding:"3px 9px",borderRadius:8,fontSize:10,fontWeight:700,whiteSpace:"nowrap" }}>{sb.text}</span>
+          </div>
         </div>
         {/* Description */}
         <div style={{ fontSize:12,color:"#64748B",lineHeight:1.6,marginBottom:12,background:"#F8FAFC",padding:"9px 12px",borderRadius:8,border:"1px solid #F1F5F9" }}>{hw.description}</div>
         {/* Footer */}
         <div style={{ display:"flex",alignItems:isMobile?"flex-start":"center",gap:8,flexWrap:"wrap",flexDirection:isMobile?"column":"row" }}>
-          <span style={{ background:db.bg,color:db.color,border:`1px solid ${db.color}33`,padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:800 }}>
-            📅 {hw.dueDate} · {db.text}
+          <span style={{ background:"#F8FAFC",color:"#475569",border:"1px solid #E2E8F0",padding:"4px 10px",borderRadius:8,fontSize:11,fontWeight:700 }}>
+            📅 Due {hw.dueDate || '—'}
           </span>
-          <div style={{ display:"flex",gap:6,marginLeft:isMobile?0:"auto" }}>
-            {!done&&<button onClick={()=>onEdit(hw)} style={{ background:"#EEF2FF",color:"#6366F1",border:"1px solid #C7D2FE",borderRadius:7,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700 }}>✏️ Edit</button>}
-            <button onClick={()=>onWhatsApp(hw)} style={{ background:"#F0FDF4",color:"#16A34A",border:"1px solid #86EFAC",borderRadius:7,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700 }}>📱 Remind</button>
+          <div style={{ display:"flex",gap:6,marginLeft:isMobile?0:"auto",flexWrap:"wrap" }}>
+            {!archived && (
+              <button onClick={()=>onEdit(hw)} style={{ background:"#EEF2FF",color:"#6366F1",border:"1px solid #C7D2FE",borderRadius:7,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700 }}>✏️ Edit</button>
+            )}
+            {/* Remind only makes sense for active (not yet past due) homework */}
+            {!archived && !past && (
+              <button onClick={()=>onWhatsApp(hw)} style={{ background:"#F0FDF4",color:"#16A34A",border:"1px solid #86EFAC",borderRadius:7,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700 }}>📱 Remind</button>
+            )}
+            {/* Archive only when past due and not already archived */}
+            {!archived && past && (
+              <button onClick={()=>onArchive(hw.id)} style={{ background:"#F8FAFC",color:"#64748B",border:"1px solid #E2E8F0",borderRadius:7,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700 }}>📦 Archive</button>
+            )}
             {confirmDel
               ? <div style={{ display:"flex",gap:4,alignItems:"center" }}>
                   <span style={{ fontSize:10,fontWeight:700,color:"#EF4444" }}>Sure?</span>
@@ -159,48 +158,46 @@ function HWCard({ hw, onDelete, onWhatsApp, onEdit, isMobile }) {
 }
 
 // ── Assignments Tab ───────────────────────────────────────────
-function AssignmentsTab({ homework, meta, summary, loading, error, filters, setFilters, onDelete, onWhatsApp, onEdit, classes, isMobile }) {
+function AssignmentsTab({ homework, meta, counts, loading, error, filters, setFilters, onDelete, onWhatsApp, onEdit, onArchive, onArchiveAllPending, classes, isMobile }) {
   const [search, setSearch] = useState("");
-  const debounceRef = useRef(null);
-
-  const handleSearch = val => {
-    setSearch(val);
-    clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {}, 400);  // local filter, no refetch
-  };
 
   const displayed = search
     ? homework.filter(h => h.title.toLowerCase().includes(search.toLowerCase()) || h.subject.toLowerCase().includes(search.toLowerCase()))
     : homework;
 
-  const sorted = [...displayed].sort((a,b) => {
-    const ao=isOverdue(a.dueDate), bo=isOverdue(b.dueDate);
-    if (ao&&!bo) return -1; if (!ao&&bo) return 1;
-    return new Date(a.dueDate)-new Date(b.dueDate);
-  });
+  // Backend already filters by status; keep client-side sort by due date desc
+  const sorted = [...displayed].sort((a,b) => new Date(b.dueDate) - new Date(a.dueDate));
+
+  const STATUS_TABS = [
+    ["all",      `📚 All (${counts.total})`,                "#6366F1","#EEF2FF"],
+    ["active",   `✅ Active (${counts.active})`,            "#10B981","#ECFDF5"],
+    ["pending",  `⏳ Pending Review (${counts.pending})`,   "#F59E0B","#FFFBEB"],
+    ["archived", `📦 Archived (${counts.archived})`,        "#64748B","#F1F5F9"],
+  ];
 
   return (
     <div>
       {/* Status quick filters */}
-      <div style={{ display:"flex",gap:10,marginBottom:16,flexWrap:"wrap" }}>
-        {[
-          ["all",       `📚 All (${summary.total})`,            "#6366F1","#EEF2FF"],
-          ["overdue",   `🔴 Overdue (${summary.overdue})`,      "#EF4444","#FEF2F2"],
-          ["today",     `⏰ Due Today (${summary.due_today})`,  "#F59E0B","#FFFBEB"],
-          ["Completed", `✅ Completed (${summary.completed})`,  "#10B981","#ECFDF5"],
-        ].map(([val,label,color,bg])=>(
+      <div style={{ display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center" }}>
+        {STATUS_TABS.map(([val,label,color,bg])=>(
           <button key={val} onClick={()=>setFilters(f=>({...f,status:val,page:1}))}
             style={{ padding:isMobile?"6px 10px":"8px 16px",borderRadius:9,border:`1.5px solid ${filters.status===val?color:"#E2E8F0"}`,background:filters.status===val?bg:"#fff",color:filters.status===val?color:"#64748B",fontSize:isMobile?11:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>
             {label}
           </button>
         ))}
+        {counts.pending > 0 && (
+          <button onClick={onArchiveAllPending}
+            style={{ marginLeft:isMobile?0:"auto",background:"#FFFBEB",color:"#D97706",border:"1px solid #FCD34D",borderRadius:9,padding:isMobile?"6px 10px":"8px 16px",fontSize:isMobile?11:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap" }}>
+            📦 Archive All Pending ({counts.pending})
+          </button>
+        )}
       </div>
 
       {/* Filters row */}
       <div style={{ display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",background:"#fff",borderRadius:12,padding:12,boxShadow:"0 1px 6px rgba(0,0,0,0.06)" }}>
         <div style={{ position:"relative",flex:1,minWidth:180 }}>
           <span style={{ position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#94A3B8",fontSize:13 }}>🔍</span>
-          <input value={search} onChange={e=>handleSearch(e.target.value)} placeholder="Search homework…"
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search homework…"
             style={{ width:"100%",paddingLeft:30,paddingRight:10,paddingTop:8,paddingBottom:8,borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit" }}/>
         </div>
         <select value={filters.class_id||""} onChange={e=>setFilters(f=>({...f,class_id:e.target.value||null,page:1}))}
@@ -227,7 +224,7 @@ function AssignmentsTab({ homework, meta, summary, loading, error, filters, setF
               <div style={{ fontSize:48,marginBottom:12 }}>📭</div>No homework found for the selected filters
             </div>
           : <div style={{ display:"grid",gridTemplateColumns:isMobile?"1fr":"repeat(auto-fill,minmax(300px,1fr))",gap:14 }}>
-              {sorted.map(hw=><HWCard key={hw.id} hw={hw} onDelete={onDelete} onWhatsApp={onWhatsApp} onEdit={onEdit} isMobile={isMobile}/>)}
+              {sorted.map(hw=><HWCard key={hw.id} hw={hw} onDelete={onDelete} onWhatsApp={onWhatsApp} onEdit={onEdit} onArchive={onArchive} isMobile={isMobile}/>)}
             </div>
       }
 
@@ -251,7 +248,7 @@ function AssignmentsTab({ homework, meta, summary, loading, error, filters, setF
 }
 
 // ── Assign / Edit Form ────────────────────────────────────────
-const EMPTY_FORM = { title:"", subjectId:"", classId:"", sectionId:"", teacherId:"", description:"", dueDate:daysFrom(3), status:"Active" };
+const EMPTY_FORM = { title:"", subjectId:"", classId:"", sectionId:"", teacherId:"", description:"", dueDate:daysFrom(3) };
 
 function AssignForm({ initial, onSave, onCancel, classes, allTeachers, showToast, isMobile, mode="assign" }) {
   const [form, setForm]           = useState(initial || EMPTY_FORM);
@@ -325,15 +322,6 @@ function AssignForm({ initial, onSave, onCancel, classes, allTeachers, showToast
               </select>
             </div>
           </div>
-          <div style={{ marginBottom:13 }}>
-            <label style={{ fontSize:10,fontWeight:800,color:"#64748B",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:0.8 }}>Status</label>
-            <select value={form.status} onChange={e=>setF({status:e.target.value})}
-              style={{ padding:"9px 10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:14,outline:"none",fontFamily:"inherit",maxWidth:200 }}>
-              <option value="Active">Active</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
           <div>
             <label style={{ fontSize:10,fontWeight:800,color:"#64748B",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:0.8 }}>Description / Instructions *</label>
             <textarea value={form.description} onChange={e=>setF({description:e.target.value})}
@@ -384,7 +372,7 @@ function AssignForm({ initial, onSave, onCancel, classes, allTeachers, showToast
             onFocus={e=>e.target.style.borderColor="#6366F1"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
           {form.dueDate && (
             <div style={{ marginTop:8,fontSize:11,color:"#64748B",textAlign:"center" }}>
-              {daysLeft(form.dueDate)===0 ? "⚠️ Due today" : daysLeft(form.dueDate)<0 ? `⚠️ Overdue by ${Math.abs(daysLeft(form.dueDate))} day(s)` : daysLeft(form.dueDate)===1 ? "📅 Due tomorrow" : `📅 ${daysLeft(form.dueDate)} days from today`}
+              {daysLeft(form.dueDate)===0 ? "⚠️ Due today" : daysLeft(form.dueDate)<0 ? `⚠️ Past by ${Math.abs(daysLeft(form.dueDate))} day(s)` : daysLeft(form.dueDate)===1 ? "📅 Due tomorrow" : `📅 ${daysLeft(form.dueDate)} days from today`}
             </div>
           )}
           <div style={{ display:"flex",gap:6,marginTop:10,flexWrap:"wrap" }}>
@@ -424,7 +412,7 @@ export default function Homework() {
   // ── API state ─────────────────────────────────────────────────
   const [homework, setHomework] = useState([])
   const [meta, setMeta]         = useState({ page:1, per_page:20, total:0, last_page:1 })
-  const [summary, setSummary]   = useState({ total:0, overdue:0, due_today:0, completed:0 })
+  const [counts, setCounts]     = useState({ total:0, active:0, pending:0, archived:0 })
   const [classes, setClasses]   = useState([])
   const [teachers, setTeachers] = useState([])
   const [loading, setLoading]   = useState(true)
@@ -445,21 +433,15 @@ export default function Homework() {
     try {
       const params = new URLSearchParams({ per_page: f.per_page||20, page: f.page||1 });
       if (f.class_id) params.set('class_id', f.class_id);
-      // Send status param only for direct status filters
-      if (f.status && f.status!=="all" && f.status!=="overdue" && f.status!=="today") {
-        params.set('status', f.status);
-      }
+      // 'all' => backend defaults to non-archived; 'active'/'pending'/'archived' map directly.
+      if (f.status && f.status !== "all") params.set('status', f.status);
 
       const res = await apiFetch(`/homework?${params}`);
-      let data  = (res.data || []).map(normalize);
-
-      // Client-side post-filter for quick-filter tabs
-      if (f.status === "overdue") data = data.filter(h => isOverdue(h.dueDate) && h.status === "Active");
-      if (f.status === "today")   data = data.filter(h => isDueToday(h.dueDate));
+      const data = (res.data || []).map(normalize);
 
       setHomework(data);
-      setMeta(res.meta    || { page:1, per_page:20, total:data.length, last_page:1 });
-      setSummary(res.summary || { total:0, overdue:0, due_today:0, completed:0 });
+      setMeta(res.meta || { page:1, per_page:20, total:data.length, last_page:1 });
+      setCounts(res.counts || { total:0, active:0, pending:0, archived:0 });
     } catch(e) {
       setError(e.message);
     } finally {
@@ -490,7 +472,6 @@ export default function Homework() {
         class_id:    form.classId,
         section_id:  form.sectionId  || null,
         teacher_id:  form.teacherId  || null,
-        status:      form.status     || 'Active',
       },
     });
     showToast(`Homework assigned: ${res.data.title}`);
@@ -505,7 +486,6 @@ export default function Homework() {
         title:       form.title.trim(),
         description: form.description.trim(),
         due_date:    form.dueDate,
-        status:      form.status,
       },
     });
     showToast("Homework updated");
@@ -517,14 +497,31 @@ export default function Homework() {
     try {
       await apiFetch(`/homework/${id}`, { method:'DELETE' });
       setHomework(p => p.filter(h => h.id !== id));
-      setSummary(s => ({...s, total: Math.max(0, s.total-1)}));
       showToast("Homework deleted");
+      setFilters(f => ({...f})); // refetch for fresh counts
+    } catch(e) { showToast(e.message, "error"); }
+  };
+
+  const handleArchive = async (id) => {
+    try {
+      await apiFetch(`/homework/${id}/archive`, { method:'POST' });
+      showToast("Homework archived");
+      setFilters(f => ({...f})); // refetch
+    } catch(e) { showToast(e.message, "error"); }
+  };
+
+  const handleArchiveAllPending = async () => {
+    if (!window.confirm(`Archive all ${counts.pending} pending homework? This marks them as reviewed.`)) return;
+    try {
+      const res = await apiFetch('/homework/archive-pending', { method:'POST' });
+      showToast(res.message || `${res.count} homework archived`);
+      setFilters(f => ({...f})); // refetch
     } catch(e) { showToast(e.message, "error"); }
   };
 
   const handleWhatsApp = async (hw) => {
-    const db  = dueBadge(hw.dueDate);
-    const msg = `Dear Parent,\n\n📚 Homework Reminder\n\nSubject: ${hw.subject}\nClass: ${hw.class}-${hw.section}\nTask: ${hw.title}\nDue: ${hw.dueDate} (${db.text})\n\nPlease ensure your child completes this assignment on time.\n\nRegards,\nSchool`;
+    const sb  = statusBadge(hw);
+    const msg = `Dear Parent,\n\n📚 Homework Reminder\n\nSubject: ${hw.subject}\nClass: ${hw.class}-${hw.section}\nTask: ${hw.title}\nDue: ${hw.dueDate} (${sb.text.replace(/^[^a-zA-Z]+/, '')})\n\nPlease ensure your child completes this assignment on time.\n\nRegards,\nSchool`;
     try {
       const params = new URLSearchParams({ per_page:200 });
       if (hw.classId)   params.set('class_id',   hw.classId);
@@ -544,20 +541,17 @@ export default function Homework() {
   };
 
   // ── KPI widgets ───────────────────────────────────────────────
-  const thisWeek = homework.filter(h => { const d=daysLeft(h.dueDate); return d>=0 && d<=7 && h.status==="Active"; }).length;
-
   const widgets = [
-    { icon:"📚", label:"Total Assigned",  value:summary.total,     c:"#6366F1", bg:"#EEF2FF", sub:"All active homework" },
-    { icon:"🔴", label:"Overdue",         value:summary.overdue,   c:"#EF4444", bg:"#FEF2F2", sub:"Past due date"       },
-    { icon:"⏰", label:"Due Today",       value:summary.due_today, c:"#F59E0B", bg:"#FFFBEB", sub:"Submit today"        },
-    { icon:"📅", label:"Due This Week",   value:thisWeek,          c:"#10B981", bg:"#ECFDF5", sub:"Next 7 days"         },
+    { icon:"📚", label:"Total Active",   value:counts.total,    c:"#6366F1", bg:"#EEF2FF", sub:"Currently in play" },
+    { icon:"✅", label:"Active",         value:counts.active,   c:"#10B981", bg:"#ECFDF5", sub:"Due today or later" },
+    { icon:"⏳", label:"Pending Review", value:counts.pending,  c:"#F59E0B", bg:"#FFFBEB", sub:"Past due date"      },
+    { icon:"📦", label:"Archived",       value:counts.archived, c:"#94A3B8", bg:"#F8FAFC", sub:"Reviewed & done"    },
   ];
 
   const editInitial = editingHW ? {
     title:       editingHW.title,
     description: editingHW.description,
     dueDate:     editingHW.dueDate,
-    status:      editingHW.status,
     subjectId:   editingHW.subjectId || null,
     classId:     editingHW.classId   || null,
     sectionId:   editingHW.sectionId || null,
@@ -611,9 +605,10 @@ export default function Homework() {
       {/* Tab content */}
       {tab==="assignments" && (
         <AssignmentsTab
-          homework={homework} meta={meta} summary={summary} loading={loading} error={error}
+          homework={homework} meta={meta} counts={counts} loading={loading} error={error}
           filters={filters} setFilters={setFilters}
-          onDelete={handleDelete} onWhatsApp={handleWhatsApp}
+          onDelete={handleDelete} onWhatsApp={handleWhatsApp} onArchive={handleArchive}
+          onArchiveAllPending={handleArchiveAllPending}
           onEdit={hw=>{ setEditing(hw); switchTab("edit"); }}
           classes={classes} isMobile={isMobile}/>
       )}
