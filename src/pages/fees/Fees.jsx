@@ -6,7 +6,8 @@ import DataTable from '../../components/ui/DataTable'
 import Avatar from '../../components/ui/Avatar'
 import Toast from '../../components/ui/Toast'
 import WABtn from '../../components/ui/WABtn'
-import FeeSettingsModal from './FeeSettingsModal'
+// FeeSettingsModal was the old combined fee-types+classes editor.
+// Superseded by the dedicated Fee Config tab below.
 import FeeConfigTab from './FeeConfigTab'
 import { openWA, invMsg, rcptMsg, printInvoicePDF, printReceiptPDF } from './feeHelpers'
 import { fmt, fmtDate, todayStr } from '../../helpers/format'
@@ -92,7 +93,6 @@ export default function Fees() {
   const [payM, setPayM]           = useState(null)
   const [detailM, setDetailM]     = useState(null)
   const [rcptM, setRcptM]         = useState(null)
-  const [settM, setSettM]         = useState(false)
   const [deleteId, setDeleteId]   = useState(null)
   const [editM, setEditM]         = useState(null)
   const [ef, setEf]               = useState({ due_date: '', notes: '', items: [] })
@@ -407,8 +407,6 @@ export default function Fees() {
     { key: 'act',       label: 'Actions', sortable: false, render: (_, r) => <div style={{ display: 'flex', gap: 5 }}><button onClick={() => setRcptM({ inv: r.inv, pmt: r })} style={{ background: '#F1F5F9', color: '#475569', border: 'none', borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>👁</button><WABtn sent={r.inv.rcpt_sent} onClick={() => sendRcptWA(r.inv, r)} label='Send' /></div> },
   ]
 
-  const saveSettings = (ft, cls) => { setFeeTypes(ft); setStoreClasses(cls); setSettM(false); showToast('Fee settings saved!') }
-
   // ── Pagination info ────────────────────────────────────────────────────────
   const pageStart = (meta.page - 1) * meta.per_page + 1
   const pageEnd   = Math.min(meta.page * meta.per_page, meta.total)
@@ -426,8 +424,9 @@ export default function Fees() {
         ))}
       </div>
       <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-        <button onClick={() => setSettM(true)} style={{ background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>⚙️ Fee Settings</button>
-        <button onClick={() => setCreateM(true)} style={{ background: '#6366F1', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(99,102,241,0.25)' }}>+ Create Invoice</button>
+        {view === 'invoices' && (
+          <button onClick={() => setCreateM(true)} style={{ background: '#6366F1', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 2px 8px rgba(99,102,241,0.25)' }}>+ Create Invoice</button>
+        )}
       </div>
     </div>
 
@@ -809,7 +808,6 @@ export default function Fees() {
       </div>
     )}
 
-    {settM && <FeeSettingsModal feeTypes={feeTypes} classes={classes} onSave={saveSettings} onClose={() => setSettM(false)} />}
     <Toast toast={toast} />
   </>
 }
