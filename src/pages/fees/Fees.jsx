@@ -9,6 +9,7 @@ import WABtn from '../../components/ui/WABtn'
 // FeeSettingsModal was the old combined fee-types+classes editor.
 // Superseded by the dedicated Fee Config tab below.
 import FeeConfigTab from './FeeConfigTab'
+import InvoicesGroupedView from './InvoicesGroupedView'
 import { openWA, invMsg, rcptMsg, printInvoicePDF, printReceiptPDF } from './feeHelpers'
 import { fmt, fmtDate, todayStr } from '../../helpers/format'
 import { PAYMENT_MODES, FEE_STATUS_META, SCHOOL } from '../../constants'
@@ -245,9 +246,11 @@ export default function Fees() {
       }
       const r = await apiFetch(`/fees/invoices/${payM.id}/pay`, { method: 'POST', body: JSON.stringify(body) })
       if (r.success) {
+        const onSuccess = payM._onSuccess
         setPayM(null)
         setPf(bPay())
         await Promise.all([fetchInvoices(page), fetchSummary(), fetchPayInvs()])
+        onSuccess?.()
         showToast(`Payment ${fmt(amt)} recorded via ${pf.mode}`)
       }
     } catch (e) { showToast(e.message, 'error') }
@@ -450,15 +453,14 @@ export default function Fees() {
 
     {/* Filters */}
     <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap', alignItems: 'center' }}>
-      <input placeholder='🔍 Search student / invoice...' value={srch} onChange={e => handleSrch(e.target.value)} style={{ padding: '8px 13px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, background: '#fff', outline: 'none', minWidth: 240 }} />
-      <select value={fCls} onChange={e => setFCls(e.target.value)} style={{ padding: '8px 11px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, background: '#fff', cursor: 'pointer', outline: 'none' }}>
-        <option value=''>All Classes</option>
-        {classes.map(c => <option key={c.id} value={c.id}>Class {c.name}</option>)}
-      </select>
-      {view === 'invoices' && (
-        <select value={fSts} onChange={e => setFSts(e.target.value)} style={{ padding: '8px 11px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, background: '#fff', cursor: 'pointer', outline: 'none' }}>
-          {[['','All Status'], ['Unpaid','Unpaid'], ['Partial','Partial'], ['Paid','Paid']].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
+      {view !== 'invoices' && (
+        <>
+          <input placeholder='🔍 Search student / invoice...' value={srch} onChange={e => handleSrch(e.target.value)} style={{ padding: '8px 13px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, background: '#fff', outline: 'none', minWidth: 240 }} />
+          <select value={fCls} onChange={e => setFCls(e.target.value)} style={{ padding: '8px 11px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, background: '#fff', cursor: 'pointer', outline: 'none' }}>
+            <option value=''>All Classes</option>
+            {classes.map(c => <option key={c.id} value={c.id}>Class {c.name}</option>)}
+          </select>
+        </>
       )}
       <select value={yrId || ''} onChange={e => setYrId(Number(e.target.value))} style={{ padding: '8px 11px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, background: '#fff', cursor: 'pointer', outline: 'none' }}>
         {academicYears.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
@@ -481,28 +483,15 @@ export default function Fees() {
 
     {/* Tables */}
     {view === 'invoices' && (
-      <>
-        {loading ? (
-          <div style={{ background: '#fff', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody>
-            </table>
-          </div>
-        ) : (
-          <DataTable columns={iCols} data={invs} emptyMsg='No invoices found' />
-        )}
-        {/* Pagination */}
-        {meta.total > meta.per_page && (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, fontSize: 12, color: '#64748B' }}>
-            <span>Showing {pageStart}–{pageEnd} of {meta.total}</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => goPage(page - 1)} disabled={page <= 1 || loading} style={{ padding: '5px 11px', borderRadius: 7, border: '1px solid #E2E8F0', background: '#fff', cursor: page <= 1 ? 'default' : 'pointer', opacity: page <= 1 ? 0.4 : 1, fontWeight: 600 }}>← Prev</button>
-              <span style={{ padding: '5px 11px', fontWeight: 700 }}>{page} / {meta.last_page}</span>
-              <button onClick={() => goPage(page + 1)} disabled={page >= meta.last_page || loading} style={{ padding: '5px 11px', borderRadius: 7, border: '1px solid #E2E8F0', background: '#fff', cursor: page >= meta.last_page ? 'default' : 'pointer', opacity: page >= meta.last_page ? 0.4 : 1, fontWeight: 600 }}>Next →</button>
-            </div>
-          </div>
-        )}
-      </>
+      <InvoicesGroupedView
+        classes={classes}
+        yearId={yrId}
+        showToast={showToast}
+        onOpenPayModal={(inv) => {
+          setPayM(inv)
+          setPf({ ...bPay(), amt: String(Number(inv.total || 0) - Number(inv.paid || 0)) })
+        }}
+      />
     )}
     {view === 'payments' && <><div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: '#1E40AF', fontWeight: 600 }}>💳 Payment transactions — use for daily cash reconciliation</div>{loadingPay ? <div style={{ background: '#fff', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody></table></div> : <DataTable columns={pCols} data={payRows} emptyMsg='No payments yet' />}</>}
     {view === 'receipts' && <><div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: '#065F46', fontWeight: 600 }}>🧾 Send payment receipts to parents via WhatsApp</div>{loadingPay ? <div style={{ background: '#fff', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody></table></div> : <DataTable columns={rCols} data={rcptRows} emptyMsg='No receipts yet' />}</>}

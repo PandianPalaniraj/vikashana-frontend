@@ -19,7 +19,9 @@ const apiFetch = async (path, opts = {}) => {
   return json
 }
 
-const FEE_TYPES = ['Tuition', 'Transport', 'Library', 'Sports', 'Lab', 'Exam', 'Hostel', 'Activity', 'Other']
+// Transport intentionally omitted — it lives in the Transport Fees sub-tab
+// (distance-tier based) and shouldn't be configured per class here.
+const FEE_TYPES = ['Tuition', 'Library', 'Sports', 'Lab', 'Exam', 'Hostel', 'Activity', 'Other']
 const TERMS     = ['Term 1', 'Term 2', 'Term 3', 'Annual', 'Monthly', 'Q1', 'Q2', 'Q3', 'Q4']
 
 const fmtINR = n => Number(n || 0).toLocaleString('en-IN')
