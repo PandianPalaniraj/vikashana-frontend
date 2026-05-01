@@ -305,6 +305,122 @@ function DocsUpload({ value, onChange }) {
   );
 }
 
+// ── Fee selection panel (create flow) ──────────────────────────
+// Renders the checkboxes for fee types, the transport distance
+// input + matched-tier preview, and the live invoice summary.
+const FEE_OPTIONS = [
+  { key: 'tuition',   label: 'Tuition',   icon: '📚' },
+  { key: 'transport', label: 'Transport', icon: '🚌' },
+  { key: 'hostel',    label: 'Hostel',    icon: '🏠' },
+  { key: 'library',   label: 'Library',   icon: '📖' },
+  { key: 'sports',    label: 'Sports',    icon: '⚽' },
+  { key: 'lab',       label: 'Lab',       icon: '🔬' },
+  { key: 'exam',      label: 'Exam',      icon: '📝' },
+];
+
+function FeeSelectionPanel({ feePreview, selectedFees, setSelectedFees, transportDistance, setTransportDistance, transportFee }) {
+  const inINR = n => Number(n || 0).toLocaleString('en-IN');
+
+  // Class fees that match the user's checkbox selection.
+  const selectedClassFees = (feePreview?.data || []).filter(
+    f => selectedFees[String(f.fee_type).toLowerCase()]
+  );
+
+  let total = selectedClassFees.reduce((s, f) => s + Number(f.amount || 0), 0);
+  if (selectedFees.transport && transportFee) total += Number(transportFee.amount || 0);
+
+  return (
+    <div style={{ background:"#F8FAFF", border:"1px solid #C7D2FE", borderRadius:14, padding:20, marginTop:8 }}>
+      <div style={{ fontSize:13, fontWeight:800, color:"#4338CA", marginBottom:14, display:"flex", alignItems:"center", gap:8 }}>
+        🧾 Select Applicable Fees
+        <span style={{ fontSize:11, fontWeight:500, color:"#818CF8" }}>(Invoices auto-created on enrollment)</span>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px, 1fr))", gap:10 }}>
+        {FEE_OPTIONS.map(fee => {
+          const checked = !!selectedFees[fee.key];
+          return (
+            <label key={fee.key}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
+                background: checked ? '#EEF2FF' : '#fff',
+                border: checked ? '1.5px solid #6366F1' : '1.5px solid #E2E8F0',
+                borderRadius:10, cursor:"pointer", transition:"all 0.15s", userSelect:"none" }}>
+              <input type="checkbox" checked={checked}
+                onChange={e => setSelectedFees(prev => ({ ...prev, [fee.key]: e.target.checked }))}
+                style={{ width:16, height:16, accentColor:"#6366F1", cursor:"pointer" }}/>
+              <span style={{ fontSize:16 }}>{fee.icon}</span>
+              <span style={{ fontSize:13, fontWeight:700, color: checked ? '#4338CA' : '#374151' }}>{fee.label}</span>
+            </label>
+          );
+        })}
+      </div>
+
+      {/* Transport distance input — only when transport is selected */}
+      {selectedFees.transport && (
+        <div style={{ marginTop:14, padding:16, background:"#fff", borderRadius:10, border:"1px solid #C7D2FE" }}>
+          <label style={{ fontSize:11, fontWeight:800, color:"#4338CA", display:"block", marginBottom:6, textTransform:"uppercase", letterSpacing:0.8 }}>
+            🚌 Student Distance from School (km) *
+          </label>
+          <div style={{ display:"flex", gap:12, alignItems:"center" }}>
+            <input type="number" min="0" step="0.1" value={transportDistance}
+              onChange={e => setTransportDistance(e.target.value)} placeholder="e.g. 7.5"
+              style={{ width:160, padding:"8px 12px", borderRadius:8, border:"1.5px solid #E2E8F0", fontSize:13, outline:"none", boxSizing:"border-box", fontFamily:"inherit", background:"#fff" }}/>
+            <span style={{ fontSize:13, color:"#64748B" }}>km from school</span>
+          </div>
+
+          {transportDistance !== '' && (
+            transportFee ? (
+              <div style={{ marginTop:10, display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background:"#ECFDF5", borderRadius:8, border:"1px solid #6EE7B7" }}>
+                <span style={{ fontSize:18 }}>✅</span>
+                <div>
+                  <div style={{ fontSize:12, color:"#065F46", fontWeight:700 }}>
+                    Matched range: {transportFee.distance_from} – {transportFee.distance_to} km
+                    {transportFee.label ? ` (${transportFee.label})` : ''}
+                  </div>
+                  <div style={{ fontSize:16, fontWeight:900, color:"#059669", marginTop:2 }}>₹{inINR(transportFee.amount)} P/A</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ marginTop:10, padding:"10px 14px", background:"#FEF2F2", borderRadius:8, border:"1px solid #FCA5A5", fontSize:12, color:"#DC2626", fontWeight:600 }}>
+                ⚠️ No transport fee tier covers {transportDistance} km. Set up tiers in Fees → Fee Config → Transport Fees.
+              </div>
+            )
+          )}
+        </div>
+      )}
+
+      {/* Invoice preview */}
+      {(selectedClassFees.length > 0 || (selectedFees.transport && transportFee)) ? (
+        <div style={{ marginTop:16, padding:16, background:"#fff", borderRadius:10, border:"1px solid #E2E8F0" }}>
+          <div style={{ fontSize:12, fontWeight:800, color:"#0F172A", marginBottom:10, textTransform:"uppercase", letterSpacing:0.8 }}>
+            📋 Invoice Preview
+          </div>
+          {selectedClassFees.map(fee => (
+            <div key={fee.id} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #F1F5F9", fontSize:13 }}>
+              <span style={{ color:"#374151" }}>{fee.term} — {fee.fee_type}</span>
+              <span style={{ fontWeight:700, color:"#059669" }}>₹{inINR(fee.amount)}</span>
+            </div>
+          ))}
+          {selectedFees.transport && transportFee && (
+            <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #F1F5F9", fontSize:13 }}>
+              <span style={{ color:"#374151" }}>🚌 Transport ({transportFee.distance_from} – {transportFee.distance_to} km)</span>
+              <span style={{ fontWeight:700, color:"#059669" }}>₹{inINR(transportFee.amount)} P/A</span>
+            </div>
+          )}
+          <div style={{ display:"flex", justifyContent:"space-between", marginTop:10, paddingTop:8, borderTop:"2px solid #E2E8F0" }}>
+            <span style={{ fontWeight:800, color:"#0F172A", fontSize:14 }}>Total</span>
+            <span style={{ fontWeight:900, color:"#059669", fontSize:16 }}>₹{inINR(total)}</span>
+          </div>
+        </div>
+      ) : feePreview && !feePreview.has_config ? (
+        <div style={{ marginTop:14, background:"#FFFBEB", border:"1px solid #FCD34D", borderRadius:10, padding:12, fontSize:12, color:"#92400E" }}>
+          ⚠️ No fee config for this class yet. Go to <strong>Fees → Fee Config</strong> to set it up.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 // ── #1: Status toggle pill ─────────────────────────────────────
 function StatusToggle({ status, onToggle }) {
   return (
@@ -829,6 +945,39 @@ export default function Students() {
       .catch(() => {});
   }, [formClassObj?.id, editId]);
 
+  // Per-student fee selection. Tuition is on by default; the rest are
+  // opt-in. Keys are lowercased fee_type names from the backend so we
+  // can do a case-insensitive match against FeeConfig rows.
+  const [selectedFees, setSelectedFees] = useState({
+    tuition: true, transport: false, hostel: false,
+    library: false, sports: false, lab: false, exam: false,
+  });
+  const [transportDistance, setTransportDistance] = useState('');
+  const [transportConfigs, setTransportConfigs]   = useState([]);
+  // Load the transport tiers once so we can match a tier locally as the
+  // admin types the distance — no extra request per keystroke.
+  useEffect(() => {
+    if (editId) return;
+    apiFetch('/transport-fee-configs')
+      .then(r => { if (r.success) setTransportConfigs(r.data || []); })
+      .catch(() => {});
+  }, [editId]);
+  // Match the typed distance to a tier (range is [from, to)).
+  const transportFee = (() => {
+    if (!selectedFees.transport || transportDistance === '') return null;
+    const d = Number(transportDistance);
+    if (Number.isNaN(d)) return null;
+    return transportConfigs.find(c =>
+      d >= Number(c.distance_from) && d < Number(c.distance_to)
+    ) || null;
+  })();
+  // Reset state when class changes so a left-over transport selection
+  // from one class doesn't leak into another.
+  useEffect(() => {
+    setSelectedFees(s => ({ ...s, transport: false }));
+    setTransportDistance('');
+  }, [formClassObj?.id]);
+
   const refetch = useCallback(() => {
     fetchStudents(search, fClass, fStatus, page);
   }, [search, fClass, fStatus, page, fetchStudents]);
@@ -948,6 +1097,14 @@ export default function Students() {
       if (!editId) {
         fd.append('admission_no',     form.admission_no);
         fd.append('academic_year_id', academicYearId);
+        // Fee selection — selected_fees[] is a list of fee_type names.
+        Object.entries(selectedFees).forEach(([key, on]) => {
+          if (on) fd.append('selected_fees[]', key);
+        });
+        if (selectedFees.transport && transportFee) {
+          fd.append('transport_config_id',  transportFee.id);
+          if (transportDistance !== '') fd.append('distance_from_school', transportDistance);
+        }
       }
       if (form.photoFile) fd.append('photo', form.photoFile);
       form.docs.filter(d => d.file).forEach(d => fd.append('documents[]', d.file));
@@ -992,6 +1149,13 @@ export default function Students() {
       if (!editId) {
         body.admission_no     = form.admission_no;
         body.academic_year_id = academicYearId;
+        // Fee selection — array of fee_type names.
+        body.selected_fees = Object.entries(selectedFees)
+          .filter(([, on]) => on).map(([k]) => k);
+        if (selectedFees.transport && transportFee) {
+          body.transport_config_id  = transportFee.id;
+          if (transportDistance !== '') body.distance_from_school = Number(transportDistance);
+        }
       }
       try {
         if (editId) {
@@ -1338,33 +1502,17 @@ export default function Students() {
             <FormField label="Roll Number / Admission No" field="admission_no" required
               value={form.admission_no} onChange={handleChange} error={formErrors.admission_no} />
 
-            {/* Fee preview — shows what invoices will be auto-created when this student is enrolled */}
+            {/* Fee selection + preview — shown only on create, not edit */}
             {!editId && form.class && (
               <div style={{ gridColumn:"1/-1" }}>
-                {feePreview?.has_config ? (
-                  <div style={{ background:"#ECFDF5", border:"1px solid #6EE7B7", borderRadius:12, padding:16 }}>
-                    <div style={{ fontSize:12, fontWeight:800, color:"#065F46", marginBottom:10, textTransform:"uppercase", letterSpacing:0.8 }}>
-                      ✅ Auto Invoice Preview
-                    </div>
-                    <div style={{ fontSize:12, color:"#047857", marginBottom:10 }}>
-                      The following invoices will be created automatically when this student is enrolled:
-                    </div>
-                    {(feePreview.data || []).map(fee => (
-                      <div key={fee.id} style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", borderBottom:"1px solid #A7F3D0", fontSize:13 }}>
-                        <span style={{ color:"#065F46", fontWeight:600 }}>{fee.term} — {fee.fee_type}</span>
-                        <span style={{ color:"#059669", fontWeight:800 }}>₹{Number(fee.amount).toLocaleString("en-IN")}</span>
-                      </div>
-                    ))}
-                    <div style={{ display:"flex", justifyContent:"space-between", marginTop:10, paddingTop:8, borderTop:"2px solid #6EE7B7" }}>
-                      <span style={{ fontWeight:800, color:"#065F46", fontSize:14 }}>Total Fees</span>
-                      <span style={{ fontWeight:900, color:"#059669", fontSize:16 }}>₹{Number(feePreview.total_amount || 0).toLocaleString("en-IN")}</span>
-                    </div>
-                  </div>
-                ) : feePreview && !feePreview.has_config ? (
-                  <div style={{ background:"#FFFBEB", border:"1px solid #FCD34D", borderRadius:12, padding:12, fontSize:12, color:"#92400E" }}>
-                    ⚠️ No fee config for this class yet. Go to <strong>Fees → Fee Config</strong> to set it up.
-                  </div>
-                ) : null}
+                <FeeSelectionPanel
+                  feePreview={feePreview}
+                  selectedFees={selectedFees}
+                  setSelectedFees={setSelectedFees}
+                  transportDistance={transportDistance}
+                  setTransportDistance={setTransportDistance}
+                  transportFee={transportFee}
+                />
               </div>
             )}
           </div>
