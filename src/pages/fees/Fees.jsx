@@ -10,7 +10,7 @@ import WABtn from '../../components/ui/WABtn'
 // Superseded by the dedicated Fee Config tab below.
 import FeeConfigTab from './FeeConfigTab'
 import InvoicesGroupedView from './InvoicesGroupedView'
-import { openWA, invMsg, rcptMsg, printInvoicePDF, printReceiptPDF } from './feeHelpers'
+import { openWA, invMsg, printInvoicePDF, printReceiptPDF } from './feeHelpers'
 import { fmt, fmtDate, todayStr } from '../../helpers/format'
 import { PAYMENT_MODES, FEE_STATUS_META, SCHOOL } from '../../constants'
 
@@ -182,14 +182,46 @@ export default function Fees() {
   }, [fSts, fCls]) // eslint-disable-line
 
   // ── Create form helpers ────────────────────────────────────────────────────
-  const autofill = student_id => {
-    const s = allStudents.find(x => x.id === Number(student_id) || x.id === student_id)
-    const clsName = s?.class?.name || ''
-    const items = feeTypes.filter(ft => ft.active).map(ft => ({
-      label: ft.name, amount: ft.defaultAmounts?.[clsName] || 0, on: true,
-    }))
-    setCf(f => ({ ...f, student_id, items }))
+  // Individual mode: pulls fee items from the per-class FeeConfig + transport
+  // tiers (with an already_invoiced flag) so the admin picks from a curated
+  // list instead of typing fee types.
+  const autofill = async (student_id) => {
+    if (!student_id) { setCf(f => ({ ...f, student_id: '', items: [] })); return }
+    try {
+      const r = await apiFetch(`/fees/invoices/fee-items-for-student?student_id=${student_id}&academic_year_id=${cf.yrId || yrId}`)
+      if (r.success) {
+        const items = [
+          ...r.fee_configs.map(c => ({
+            label:            c.fee_type + (c.term ? ` · ${c.term}` : ''),
+            amount:           c.amount,
+            on:               !c.already_invoiced,
+            fee_config_id:    c.id,
+            source:           'config',
+            term:             c.term,
+            already_invoiced: c.already_invoiced,
+          })),
+          ...r.transport_configs.map(c => ({
+            label:            `Transport · ${c.label}`,
+            amount:           c.amount,
+            on:               false,
+            fee_config_id:    null,
+            source:           'transport',
+            term:             c.term,
+          })),
+        ]
+        setCf(f => ({ ...f, student_id, items }))
+      }
+    } catch (e) {
+      showToast(e.message, 'error')
+      setCf(f => ({ ...f, student_id, items: [] }))
+    }
   }
+
+  // Add a freeform custom fee item to the picker (no fee_config_id)
+  const addCustomItem = () => setCf(f => ({
+    ...f,
+    items: [...f.items, { label: '', amount: '', on: true, source: 'custom', fee_config_id: null }],
+  }))
 
   const autofillClass = (clsName, clsId) => {
     const items = feeTypes.filter(ft => ft.active).map(ft => ({
@@ -202,31 +234,60 @@ export default function Fees() {
 
   // ── Create invoice ─────────────────────────────────────────────────────────
   const createInv = async () => {
-    const items = cf.items.filter(i => i.on && Number(i.amount) > 0).map(i => ({ label: i.label, amount: Number(i.amount) }))
-    if (!items.length) { showToast('Add at least one fee item', 'error'); return }
-
-    let body
-    if (cf.mode === 'class') {
-      if (!cf.bulkClassId) { showToast('Select a class', 'error'); return }
-      body = { class_id: cf.bulkClassId, academic_year_id: cf.yrId, month: cf.month || undefined, items, due_date: cf.dueDate || undefined, notes: cf.notes || undefined }
-      if (cf.bulkSection) body.section_id = cf.bulkSection
-    } else {
-      if (!cf.student_id) { showToast('Select a student', 'error'); return }
-      body = { student_id: cf.student_id, academic_year_id: cf.yrId, month: cf.month || undefined, items, due_date: cf.dueDate || undefined, notes: cf.notes || undefined }
-    }
+    const selected = cf.items.filter(i => i.on && i.label && Number(i.amount) > 0)
+    if (!selected.length) { showToast('Add at least one fee item', 'error'); return }
 
     setSaving(true)
     try {
-      const r = await apiFetch('/fees/invoices', { method: 'POST', body: JSON.stringify(body) })
-      if (r.success) {
-        setCreateM(false)
-        resetCf()
+      // Bulk class mode: existing one-invoice-with-many-items shape
+      if (cf.mode === 'class') {
+        if (!cf.bulkClassId) { showToast('Select a class', 'error'); return }
+        const body = {
+          class_id:         cf.bulkClassId,
+          academic_year_id: cf.yrId,
+          month:            cf.month || undefined,
+          items:            selected.map(i => ({ label: i.label, amount: Number(i.amount) })),
+          due_date:         cf.dueDate || undefined,
+          notes:            cf.notes || undefined,
+        }
+        if (cf.bulkSection) body.section_id = cf.bulkSection
+        const r = await apiFetch('/fees/invoices', { method: 'POST', body: JSON.stringify(body) })
+        if (r.success) {
+          setCreateM(false); resetCf()
+          await Promise.all([fetchInvoices(1), fetchSummary()])
+          setPage(1)
+          showToast(r.message || 'Invoice(s) created')
+        }
+        setSaving(false); return
+      }
+
+      // Individual: one invoice per item so fee_config_id can be linked
+      if (!cf.student_id) { showToast('Select a student', 'error'); return }
+      const results = await Promise.all(selected.map(i => apiFetch('/fees/invoices', {
+        method: 'POST',
+        body:   JSON.stringify({
+          student_id:       cf.student_id,
+          academic_year_id: cf.yrId,
+          fee_config_id:    i.fee_config_id || undefined,
+          month:            cf.month || i.term || undefined,
+          items:            [{ label: i.label, amount: Number(i.amount) }],
+          due_date:         cf.dueDate || undefined,
+          notes:            cf.notes || undefined,
+        }),
+      }).then(r => r.success).catch(() => false)))
+      const ok = results.filter(Boolean).length
+      if (ok > 0) {
+        setCreateM(false); resetCf()
         await Promise.all([fetchInvoices(1), fetchSummary()])
         setPage(1)
-        showToast(r.message || 'Invoice(s) created')
+        showToast(`${ok} invoice${ok > 1 ? 's' : ''} created`)
       }
-    } catch (e) { showToast(e.message, 'error') }
-    setSaving(false)
+      if (ok < selected.length) showToast(`${selected.length - ok} item(s) failed`, 'error')
+    } catch (e) {
+      showToast(e.message, 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   // ── Record payment ─────────────────────────────────────────────────────────
@@ -317,13 +378,10 @@ export default function Fees() {
     showToast(`PDF downloading — attach it via 📎 in WhatsApp`)
   }
 
-  const sendRcptWA = (inv, pmt) => {
+  const downloadReceipt = (inv, pmt) => {
     const s = getStudent(inv)
     printReceiptPDF(inv, pmt, s)
-    openWA(s.phone, rcptMsg(inv, pmt, s))
-    setInvs(p => p.map(i => i.id === inv.id ? { ...i, rcpt_sent: true } : i))
-    if (detailM?.id === inv.id) setDetailM(d => d ? { ...d, rcpt_sent: true } : d)
-    showToast(`PDF downloading — attach it via 📎 in WhatsApp`)
+    showToast('Receipt PDF downloading…')
   }
 
   // ── Derived rows for Payments / Receipts tabs ──────────────────────────────
@@ -406,8 +464,7 @@ export default function Fees() {
     { key: 'fees',      label: 'Fee Items', sortable: false, render: (_, r) => <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>{(r.inv.items || []).map(i => <span key={i.label} style={{ background: '#F1F5F9', color: '#475569', padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 600 }}>{i.label}</span>)}</div> },
     { key: 'bal',       label: 'Balance', sortable: false, render: (_, r) => { const b = r.inv.total - r.inv.paid; return <span style={{ fontWeight: 700, color: b > 0 ? '#F59E0B' : '#059669' }}>{b > 0 ? fmt(b) : 'Nil ✓'}</span> } },
     { key: 'st',        label: 'Status', sortable: false, render: (_, r) => <SB st={r.inv.status} /> },
-    { key: 'wa',        label: 'WA Sent', sortable: false, render: (_, r) => r.inv.rcpt_sent ? <span style={{ color: '#059669', fontWeight: 700 }}>✅</span> : <span style={{ color: '#94A3B8' }}>—</span> },
-    { key: 'act',       label: 'Actions', sortable: false, render: (_, r) => <div style={{ display: 'flex', gap: 5 }}><button onClick={() => setRcptM({ inv: r.inv, pmt: r })} style={{ background: '#F1F5F9', color: '#475569', border: 'none', borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>👁</button><WABtn sent={r.inv.rcpt_sent} onClick={() => sendRcptWA(r.inv, r)} label='Send' /></div> },
+    { key: 'act',       label: 'Actions', sortable: false, render: (_, r) => <div style={{ display: 'flex', gap: 5 }}><button onClick={() => setRcptM({ inv: r.inv, pmt: r })} style={{ background: '#F1F5F9', color: '#475569', border: 'none', borderRadius: 6, padding: '4px 9px', fontSize: 11, cursor: 'pointer', fontWeight: 600 }}>👁</button><button onClick={() => downloadReceipt(r.inv, r)} style={{ background: 'linear-gradient(135deg,#EF4444,#DC2626)', color: '#fff', border: 'none', borderRadius: 6, padding: '4px 10px', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>📄 PDF</button></div> },
   ]
 
   // ── Pagination info ────────────────────────────────────────────────────────
@@ -422,7 +479,6 @@ export default function Fees() {
         {[['invoices','📄 Invoices'], ['payments','💳 Payments'], ['receipts','🧾 Receipts'], ['config','⚙️ Fee Config']].map(([v, l]) => (
           <button key={v} onClick={() => { setView(v); if (v === 'payments' || v === 'receipts') fetchPayInvs() }} style={{ padding: '6px 13px', borderRadius: 6, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, background: view === v ? '#fff' : 'transparent', color: view === v ? '#6366F1' : '#64748B', boxShadow: view === v ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition: 'all 0.15s' }}>
             {l}
-            {v === 'receipts' && rcptRows.filter(r => !r.inv.rcpt_sent).length > 0 && <span style={{ marginLeft: 4, background: '#F59E0B', color: '#fff', borderRadius: 99, fontSize: 9, padding: '1px 5px', fontWeight: 800 }}>{rcptRows.filter(r => !r.inv.rcpt_sent).length}</span>}
           </button>
         ))}
       </div>
@@ -465,12 +521,6 @@ export default function Fees() {
       <select value={yrId || ''} onChange={e => setYrId(Number(e.target.value))} style={{ padding: '8px 11px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 13, background: '#fff', cursor: 'pointer', outline: 'none' }}>
         {academicYears.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
       </select>
-      {view === 'receipts' && rcptRows.filter(r => !r.inv.rcpt_sent).length > 0 && (
-        <button onClick={() => { const u = rcptRows.filter(r => !r.inv.rcpt_sent); u.forEach((r, i) => setTimeout(() => sendRcptWA(r.inv, r), i * 600)); showToast(`Sending ${u.length} receipts…`) }}
-          style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, background: '#25D366', color: '#fff', border: 'none', borderRadius: 8, padding: '7px 14px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-          📲 Send {rcptRows.filter(r => !r.inv.rcpt_sent).length} Unsent
-        </button>
-      )}
     </div>
 
     {/* Error banner */}
@@ -494,7 +544,7 @@ export default function Fees() {
       />
     )}
     {view === 'payments' && <><div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: '#1E40AF', fontWeight: 600 }}>💳 Payment transactions — use for daily cash reconciliation</div>{loadingPay ? <div style={{ background: '#fff', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody></table></div> : <DataTable columns={pCols} data={payRows} emptyMsg='No payments yet' />}</>}
-    {view === 'receipts' && <><div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: '#065F46', fontWeight: 600 }}>🧾 Send payment receipts to parents via WhatsApp</div>{loadingPay ? <div style={{ background: '#fff', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody></table></div> : <DataTable columns={rCols} data={rcptRows} emptyMsg='No receipts yet' />}</>}
+    {view === 'receipts' && <><div style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: 8, padding: '9px 14px', marginBottom: 12, fontSize: 12, color: '#065F46', fontWeight: 600 }}>🧾 Download payment receipts as PDF</div>{loadingPay ? <div style={{ background: '#fff', borderRadius: 11, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}><table style={{ width: '100%', borderCollapse: 'collapse' }}><tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody></table></div> : <DataTable columns={rCols} data={rcptRows} emptyMsg='No receipts yet' />}</>}
     {view === 'config' && <FeeConfigTab showToast={showToast} isMobile={isMobile} />}
 
     {/* ── Create Invoice Modal ─────────────────────────────────────────────── */}
@@ -581,25 +631,66 @@ export default function Fees() {
               </select>
             </div>
 
+            {cf.mode === 'individual' && cf.student_id && cf.items.length === 0 && (
+              <div style={{ background: '#FFFBEB', border: '1px solid #FCD34D', borderRadius: 9, padding: '10px 14px', marginBottom: 13, fontSize: 12, color: '#92400E' }}>
+                ⚠️ No fee config found for this student's class. Add custom fee items below.
+              </div>
+            )}
+
             {cf.items.length > 0 && (
               <div style={{ marginBottom: 13 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase' }}>Fee Items</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', marginBottom: 6, textTransform: 'uppercase' }}>📋 Fee Items</div>
                 <div style={{ border: '1px solid #E2E8F0', borderRadius: 9, overflow: 'hidden' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead><tr style={{ background: '#F8FAFC' }}><th style={{ padding: '7px 11px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>✓</th><th style={{ padding: '7px 11px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Fee Type</th><th style={{ padding: '7px 11px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>₹</th></tr></thead>
+                    <thead><tr style={{ background: '#F8FAFC' }}><th style={{ padding: '7px 11px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>✓</th><th style={{ padding: '7px 11px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Fee Type</th><th style={{ padding: '7px 11px', textAlign: 'left', fontSize: 10, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>₹</th><th style={{ padding: '7px 11px', width: 32 }}></th></tr></thead>
                     <tbody>
-                      {cf.items.map((item, i) => (
-                        <tr key={item.label} style={{ borderTop: '1px solid #F1F5F9', background: item.on ? '#F0FDF4' : '#FAFAFA' }}>
-                          <td style={{ padding: '7px 11px' }}><input type='checkbox' checked={item.on} onChange={e => setCf(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, on: e.target.checked } : it) }))} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#6366F1' }} /></td>
-                          <td style={{ padding: '7px 11px', fontSize: 13, fontWeight: item.on ? 600 : 400, color: item.on ? '#1A202C' : '#94A3B8' }}>{item.label}</td>
-                          <td style={{ padding: '7px 11px' }}><input type='number' value={item.amount} disabled={!item.on} onChange={e => setCf(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, amount: e.target.value } : it) }))} style={{ width: 90, padding: '4px 7px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12, fontWeight: 600, outline: 'none', background: item.on ? '#fff' : '#F8FAFC', color: item.on ? '#1A202C' : '#CBD5E1' }} /></td>
-                        </tr>
-                      ))}
+                      {cf.items.map((item, i) => {
+                        const disabled = item.already_invoiced
+                        return (
+                          <tr key={i} style={{ borderTop: '1px solid #F1F5F9', background: disabled ? '#F8FAFC' : item.on ? '#F0FDF4' : '#FAFAFA', opacity: disabled ? 0.6 : 1 }}>
+                            <td style={{ padding: '7px 11px' }}>
+                              <input type='checkbox' checked={item.on} disabled={disabled}
+                                onChange={e => setCf(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, on: e.target.checked } : it) }))}
+                                style={{ width: 15, height: 15, cursor: disabled ? 'not-allowed' : 'pointer', accentColor: '#6366F1' }} />
+                            </td>
+                            <td style={{ padding: '7px 11px', fontSize: 13 }}>
+                              {item.source === 'custom' ? (
+                                <input value={item.label} placeholder='Custom fee label'
+                                  onChange={e => setCf(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, label: e.target.value } : it) }))}
+                                  style={{ width: '100%', padding: '4px 7px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12, fontWeight: 600, outline: 'none' }} />
+                              ) : (
+                                <span style={{ fontWeight: item.on ? 600 : 400, color: item.on ? '#1A202C' : '#94A3B8' }}>
+                                  {item.label}
+                                  {disabled && <span style={{ marginLeft: 6, background: '#ECFDF5', color: '#059669', padding: '1px 6px', borderRadius: 8, fontSize: 9, fontWeight: 700 }}>✓ Already invoiced</span>}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '7px 11px' }}>
+                              <input type='number' value={item.amount} disabled={disabled || !item.on}
+                                onChange={e => setCf(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, amount: e.target.value } : it) }))}
+                                style={{ width: 90, padding: '4px 7px', borderRadius: 6, border: '1px solid #E2E8F0', fontSize: 12, fontWeight: 600, outline: 'none', background: !disabled && item.on ? '#fff' : '#F8FAFC', color: !disabled && item.on ? '#1A202C' : '#CBD5E1' }} />
+                            </td>
+                            <td style={{ padding: '7px 6px' }}>
+                              {item.source === 'custom' && (
+                                <button onClick={() => setCf(f => ({ ...f, items: f.items.filter((_, j) => j !== i) }))}
+                                  style={{ background: '#FEF2F2', color: '#DC2626', border: 'none', borderRadius: 5, padding: '3px 7px', fontSize: 11, cursor: 'pointer', fontWeight: 700 }}>✕</button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
-                    <tfoot><tr style={{ background: '#F0FDF4', borderTop: '2px solid #A7F3D0' }}><td colSpan={2} style={{ padding: '9px 11px', fontWeight: 800, fontSize: 13 }}>Total</td><td style={{ padding: '9px 11px', fontWeight: 900, fontSize: 15, color: '#059669' }}>{fmt(cf.items.filter(i => i.on).reduce((a, i) => a + Number(i.amount || 0), 0))}</td></tr></tfoot>
+                    <tfoot><tr style={{ background: '#F0FDF4', borderTop: '2px solid #A7F3D0' }}><td colSpan={2} style={{ padding: '9px 11px', fontWeight: 800, fontSize: 13 }}>Total</td><td colSpan={2} style={{ padding: '9px 11px', fontWeight: 900, fontSize: 15, color: '#059669' }}>{fmt(cf.items.filter(i => i.on).reduce((a, i) => a + Number(i.amount || 0), 0))}</td></tr></tfoot>
                   </table>
                 </div>
               </div>
+            )}
+
+            {cf.mode === 'individual' && cf.student_id && (
+              <button type='button' onClick={addCustomItem}
+                style={{ width: '100%', padding: '9px 12px', background: '#F8FAFC', border: '2px dashed #E2E8F0', borderRadius: 9, fontSize: 12, fontWeight: 700, color: '#64748B', cursor: 'pointer', marginBottom: 13 }}>
+                + Add Custom Fee Item
+              </button>
             )}
 
             <div style={{ marginBottom: 18 }}>
@@ -683,7 +774,7 @@ export default function Fees() {
                   {(detailM.payments || []).map(p => (
                     <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F0FDF4', borderRadius: 8, padding: '8px 12px', marginBottom: 5, border: '1px solid #A7F3D0' }}>
                       <div><div style={{ fontWeight: 700, fontSize: 13 }}>{p.id}</div><div style={{ fontSize: 11, color: '#64748B' }}>{fmtDate(p.paid_at)} · {p.method}{p.reference ? ` · ${p.reference}` : ''}</div></div>
-                      <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}><span style={{ fontWeight: 800, color: '#059669' }}>{fmt(p.amount)}</span><WABtn sent={detailM.rcpt_sent} onClick={() => sendRcptWA(detailM, p)} label='Receipt' /></div>
+                      <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}><span style={{ fontWeight: 800, color: '#059669' }}>{fmt(p.amount)}</span><button onClick={() => downloadReceipt(detailM, p)} style={{ background: 'linear-gradient(135deg,#EF4444,#DC2626)', color: '#fff', border: 'none', borderRadius: 7, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>📄 PDF</button></div>
                     </div>
                   ))}
                 </div>
@@ -734,7 +825,7 @@ export default function Fees() {
           </div>
           <div style={{ padding: '0 22px 22px', display: 'flex', gap: 9 }}>
             <button onClick={() => setRcptM(null)} style={{ flex: 1, background: '#F1F5F9', color: '#64748B', border: 'none', borderRadius: 9, padding: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Close</button>
-            <WABtn sent={inv.rcpt_sent} onClick={() => { sendRcptWA(inv, pmt); setRcptM(null) }} label={`Send to ${s.phone}`} size='md' />
+            <button onClick={() => { downloadReceipt(inv, pmt); setRcptM(null) }} style={{ flex: 2, background: 'linear-gradient(135deg,#EF4444,#DC2626)', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>📄 Download Receipt PDF</button>
           </div>
         </div>
       </div>
