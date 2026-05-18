@@ -592,6 +592,15 @@ export default function Exams() {
     finally { setMarksSaving(false); }
   };
 
+  const publishResults = async (examId) => {
+    if (!window.confirm("Publish results and notify all parents via push notification?")) return;
+    try {
+      const r = await API(`/exams/${examId}/publish-results`, { method: "POST" });
+      if (r.success) showToast(`Results published! ${r.notified_count} parent(s) notified.`);
+      else showToast(r.message || "Failed", "error");
+    } catch { showToast("Network error", "error"); }
+  };
+
   // ─────────────────────────────────────────────────────────
   // DETAIL VIEW
   // ─────────────────────────────────────────────────────────
@@ -618,6 +627,13 @@ export default function Exams() {
                 borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontWeight:700 }}>
               📅 Print Timetable
             </button>
+            {ex.status === "Completed" && (
+              <button onClick={() => publishResults(ex.id)}
+                style={{ background:"linear-gradient(135deg,#10B981,#059669)", color:"#fff", border:"none",
+                  borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontWeight:700 }}>
+                📊 Publish Results & Notify Parents
+              </button>
+            )}
             <button onClick={() => setDeleteTarget(ex)}
               style={{ background:"#FEF2F2", color:"#EF4444", border:"1px solid #FCA5A5",
                 borderRadius:8, padding:"8px 14px", fontSize:13, cursor:"pointer", fontWeight:700 }}>
